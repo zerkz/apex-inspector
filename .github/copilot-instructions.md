@@ -1,0 +1,5 @@
+<!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
+
+- Ingest `README.md` to provide context for the application. 
+- Consider this is a chrome extension running within Devtools as a tab. 
+- For full project context, see [context/application_vision.md](context/application_vision.md).

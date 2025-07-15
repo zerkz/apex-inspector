@@ -107,21 +107,65 @@ const DevtoolsPanel: React.FC = () => {
                   : (paramsObj as Record<string, unknown>)["methodName"] as string;
                 // --- Error detection logic ---
                 let error: string | null = null;
+                let responseObj = resJson.actions?.[idx]?.returnValue || {};
                 const rawResp = resJson.actions?.[idx] || {};
                 if (rawResp && typeof rawResp === 'object') {
                   if (rawResp.state === 'ERROR') {
-                    if (Array.isArray(rawResp.errors) && rawResp.errors.length > 0) {
-                      error = rawResp.errors.map((e: unknown) => {
-                        if (typeof e === 'object' && e !== null && 'message' in e && typeof (e as { message: unknown }).message === 'string') {
-                          return (e as { message: string }).message;
+                    // Extract all error details, not just the message
+                    let errorDetails: Record<string, unknown> = {};
+                    let errorMsg = 'Unknown Apex error';
+                    
+                    // Handle error array (most common Salesforce format)
+                    if (Array.isArray(rawResp.error) && rawResp.error.length > 0) {
+                      const errorObj = rawResp.error[0];
+                      console.debug('[Apex Inspector] Processing error object:', errorObj);
+                      if (typeof errorObj === 'object' && errorObj !== null) {
+                        // Include all error properties: message, exceptionType, stackTrace, isUserDefinedException, etc.
+                        errorDetails = { ...errorObj };
+                        console.debug('[Apex Inspector] Error details extracted:', errorDetails);
+                        if ('message' in errorObj && typeof errorObj.message === 'string') {
+                          errorMsg = errorObj.message;
                         }
-                        return JSON.stringify(e);
-                      }).join('; ');
-                    } else if (rawResp.error) {
-                      error = typeof rawResp.error === 'string' ? rawResp.error : JSON.stringify(rawResp.error);
-                    } else {
-                      error = 'Unknown Apex error';
+                      } else {
+                        errorMsg = String(errorObj);
+                        errorDetails = { message: errorMsg };
+                      }
                     }
+                    // Handle errors array (alternative format)
+                    else if (Array.isArray(rawResp.errors) && rawResp.errors.length > 0) {
+                      const errorObj = rawResp.errors[0];
+                      if (typeof errorObj === 'object' && errorObj !== null) {
+                        errorDetails = { ...errorObj };
+                        if ('message' in errorObj && typeof errorObj.message === 'string') {
+                          errorMsg = errorObj.message;
+                        }
+                      } else {
+                        errorMsg = String(errorObj);
+                        errorDetails = { message: errorMsg };
+                      }
+                    }
+                    // Handle single error object
+                    else if (rawResp.error && typeof rawResp.error === 'object') {
+                      errorDetails = { ...rawResp.error };
+                      if ('message' in rawResp.error && typeof rawResp.error.message === 'string') {
+                        errorMsg = rawResp.error.message;
+                      }
+                    }
+                    // Handle string error
+                    else if (typeof rawResp.error === 'string') {
+                      errorMsg = rawResp.error;
+                      errorDetails = { message: errorMsg };
+                    }
+                    // Fallback
+                    else {
+                      errorDetails = { message: errorMsg };
+                    }
+                    
+                    error = errorMsg;
+                    // Compose the response object with all error details flattened at the top level
+                    responseObj = { ...errorDetails, ...resJson.actions?.[idx]?.returnValue };
+                    console.debug('[Apex Inspector] Final response object with error details:', responseObj);
+                    console.debug('[Apex Inspector] Error message set to:', error);
                   }
                 }
                 if (
@@ -141,7 +185,7 @@ const DevtoolsPanel: React.FC = () => {
                       method: apexMethod,
                       latency: request.time,
                       request: paramsObj as Record<string, unknown>,
-                      response: resJson.actions?.[idx]?.returnValue || {},
+                      response: responseObj,
                       rawRequest: action,
                       rawResponse: resJson.actions?.[idx] || {},
                       context: resJson.context || {},
@@ -333,22 +377,41 @@ const DevtoolsPanel: React.FC = () => {
               ))}
             </select>
             {/* Min Height for Raw Data */}
-            <label className="ml-2 text-xs text-gray-500 dark:text-gray-300" htmlFor="min-raw-data-height">Raw Data Min Height:</label>
-            <input
-              id="min-raw-data-height"
-              type="number"
-              min={100}
-              max={2000}
-              step={10}
-              className="ml-1 px-2 py-1 rounded text-xs border dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600 bg-gray-100 text-gray-900 border-gray-300 w-20"
-              value={minRawDataHeight}
-              onChange={e => saveSettings({ minRawDataHeight: Number(e.target.value) })}
-              style={{ minWidth: 60 }}
-            />
+            {/* Replace min height input with All Settings button */}
+            <button
+              className={`ml-2 px-3 py-2 rounded-lg text-sm border font-medium shadow-sm focus:outline-none focus:ring-2 transition-colors duration-200
+                ${theme === 'dark'
+                  ? 'bg-slate-700 text-white border-slate-500 hover:bg-indigo-700 focus:ring-indigo-500'
+                  : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 focus:ring-indigo-400'
+                }`}
+              onClick={() => {
+                if (chrome && chrome.runtime && chrome.runtime.openOptionsPage) {
+                  chrome.runtime.openOptionsPage();
+                } else {
+                  window.open('options.html', '_blank');
+                }
+              }}
+              title="Open all settings in a new tab"
+            >
+              All Settings
+            </button>
           </div>
         </div>
-        {/* Navigation/Row Counter and Clear Button Grouped Right */}
-        <div className="flex items-center gap-2 mt-2 md:mt-0">
+        {/* Navigation/Row Counter and Clear Button Grouped Right, plus Search right-aligned */}
+        <div className="flex items-center gap-4 mt-2 md:mt-0">
+          {/* Search Request/Response input right-aligned */}
+          <div className="flex items-center gap-2">
+            <label htmlFor="body-search" className="text-xs text-gray-500 dark:text-gray-300">Search Request/Response:</label>
+            <input
+              id="body-search"
+              type="text"
+              className="px-2 py-1 rounded text-xs border dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600 bg-gray-100 text-gray-900 border-gray-300 min-w-[200px]"
+              placeholder="Search request or response body..."
+              value={bodySearch}
+              onChange={e => setBodySearch(e.target.value)}
+            />
+          </div>
+          {/* Navigation/Row Counter and Clear Button */}
           <button
             className={`px-2 py-1 rounded text-xs border transition-colors duration-200 ${theme === 'dark' ? 'bg-gray-700 text-white border-gray-600 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 border-gray-300 hover:bg-gray-300'}`}
             onClick={() => setSelectedIdx((idx) => idx !== null ? Math.max(0, idx - 1) : 0)}
@@ -372,18 +435,6 @@ const DevtoolsPanel: React.FC = () => {
             Clear
           </button>
         </div>
-      </div>
-      {/* Add body search input to the UI, above the table */}
-      <div className="flex items-center gap-2 mb-2">
-        <label htmlFor="body-search" className="text-xs text-gray-500 dark:text-gray-300">Search Request/Response:</label>
-        <input
-          id="body-search"
-          type="text"
-          className="px-2 py-1 rounded text-xs border dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600 bg-gray-100 text-gray-900 border-gray-300 min-w-[200px]"
-          placeholder="Search request or response body..."
-          value={bodySearch}
-          onChange={e => setBodySearch(e.target.value)}
-        />
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full border dark:border-gray-700">
@@ -448,11 +499,6 @@ const DevtoolsPanel: React.FC = () => {
                   <tr>
                     <td colSpan={columns.length + 1} className="bg-gray-50 border-t p-2 dark:bg-gray-800 dark:border-gray-700">
                       {/* Error details if present */}
-                      {row.error && (
-                        <div className="mb-2 p-2 rounded bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 border border-red-300 dark:border-red-700">
-                          <strong>⚠️ Apex Error:</strong> {row.error}
-                        </div>
-                      )}
                       {row.apexClass === '[Unparsed] ApexAction' && row.method === '[Unparsed] execute' ? (
                         <div className="mb-2">
                           <strong>Raw Apex Action Data:</strong>
@@ -496,51 +542,8 @@ const DevtoolsPanel: React.FC = () => {
                               <span className="absolute z-50 text-xs bg-black text-white rounded px-2 py-1 left-8 top-0 animate-fade-in-out" style={{ pointerEvents: 'none' }}>Copied!</span>
                             )}
                             <div className="bg-gray-100 p-2 rounded text-xs overflow-x-auto max-h-40 min-h-[220px] dark:bg-gray-800 dark:text-gray-100 border dark:border-gray-700">
-                              {/* Focused error/exception/stacktrace summary if error */}
-                              {(() => {
-                                const rawResp = row.rawResponse as Record<string, unknown>;
-                                if (rawResp && typeof rawResp.state === 'string' && rawResp.state === 'ERROR') {
-                                  // Show error summary at the top
-                                  return (
-                                    <div>
-                                      {Array.isArray(rawResp.errors) && rawResp.errors.length > 0 && (
-                                        <div className="mb-2">
-                                          <div className="text-red-700 dark:text-red-300 text-xs">
-                                            <strong>Errors:</strong>
-                                            <ul className="list-disc ml-4">
-                                              {rawResp.errors.map((err: unknown, idx: number) => {
-                                                if (typeof err === 'object' && err !== null) {
-                                                  const errObj = err as { message?: string; stackTrace?: string; exceptionType?: string };
-                                                  return (
-                                                    <li key={idx}>
-                                                      {errObj.exceptionType && <span className="font-bold">[{errObj.exceptionType}] </span>}
-                                                      {errObj.message && <span>{errObj.message}</span>}
-                                                      {errObj.stackTrace && (
-                                                        <pre className="whitespace-pre-wrap text-xs mt-1 bg-red-50 dark:bg-red-900 p-1 rounded border border-red-200 dark:border-red-700">{errObj.stackTrace}</pre>
-                                                      )}
-                                                    </li>
-                                                  );
-                                                } else {
-                                                  return <li key={idx}>{String(err)}</li>;
-                                                }
-                                              })}
-                                            </ul>
-                                          </div>
-                                        </div>
-                                      )}
-                                      {/* Show returnValue if present, otherwise show the rest of the error object */}
-                                      {rawResp.returnValue ? (
-                                        <React18JsonView src={rawResp.returnValue} collapsed={2} enableClipboard={false} dark={jsonViewDark} theme={jsonViewTheme} />
-                                      ) : (
-                                        <React18JsonView src={rawResp} collapsed={2} enableClipboard={false} dark={jsonViewDark} theme={jsonViewTheme} />
-                                      )}
-                                    </div>
-                                  );
-                                } else {
-                                  // Success: just show the parsed returnValue
-                                  return <React18JsonView src={row.response} collapsed={2} enableClipboard={false} dark={jsonViewDark} theme={jsonViewTheme} />;
-                                }
-                              })()}
+                              {/* Always show the integrated response object which includes error as a sibling property */}
+                              <React18JsonView src={row.response} collapsed={2} enableClipboard={false} dark={jsonViewDark} theme={jsonViewTheme} />
                             </div>
                           </div>
                         </div>

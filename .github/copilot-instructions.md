@@ -2,4 +2,3 @@
 
 - Ingest `README.md` to provide context for the application. 
 - Consider this is a chrome extension running within Devtools as a tab. 
-- For full project context, see [context/application_vision.md](context/application_vision.md).

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Apex Inspector Glossary/Information</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="../chrome-extension/global.css">
+  <style>
+    body { background: #fff; color: #222; font-family: system-ui, sans-serif; margin: 0; padding: 2em; }
+    .container { max-width: 700px; margin: 0 auto; }
+    h1 { font-size: 2em; margin-bottom: 0.5em; }
+    h2 { font-size: 1.3em; margin-top: 2em; margin-bottom: 0.5em; }
+    img { max-width: 100%; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 1em; }
+    .desc { font-size: 1em; margin-bottom: 1em; }
+    a.sf-link { color: #1976d2; text-decoration: underline; }
+    .section { margin-bottom: 2em; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 id="apex-inspector-info">Apex Inspector Glossary/Information</h1>
+    <div class="section" id="boxcar-info">
+      <h2>Boxcarred Requests</h2>
+      <img src="https://sf-archs.cdn.salesforce-experience.com/cms/delivery/media/MCYGK7GIM4URF57BKM4W3SO2YVOQ?channelId=0apHs000000y0QG&oid=00DHs000003Wrxy" alt="Salesforce Boxcarred Request Diagram">
+      <div class="desc">
+        <p>A <strong>boxcarred request</strong> is a Salesforce network optimization technique that batches multiple actions into a single HTTP request. This reduces network overhead and improves performance, especially for Lightning/Aura applications.</p>
+        <ul>
+          <li>Multiple Apex actions are sent together in one request.</li>
+          <li>Responses are grouped and returned together.</li>
+          <li>Boxcarred requests are visually indicated in the Apex Inspector UI.</li>
+        </ul>
+        <p>For more details, see the <a class="sf-link" href="https://architect.salesforce.com/decision-guides/async-processing#boxcar'ing-in-lightning-actions" target="_blank" rel="noopener noreferrer">Asynchronous Processing guide</a>.</p>
+      </div>
+    </div>
+    <div class="section" id="error-info">
+      <h2>Apex Error Handling</h2>
+      <div class="desc">
+        <p>Apex Inspector parses and displays Salesforce Apex errors, including exception details and stack traces. Errors are highlighted in the UI and shown in the expanded response panel for easier debugging.</p>
+        <ul>
+          <li>Supports multiple Salesforce error formats (error, errors, exceptionType, stackTrace).</li>
+          <li>Red row and ⛔ icon indicate errors in the table.</li>
+          <li>Stack traces and exception details are shown in the expanded view.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="section" id="perf-summary-info">
+      <h2>Performance Summary Table</h2>
+      <div class="desc">
+        <p>The Salesforce provided <strong>Performance Summary</strong> table displays timing and resource usage for each Apex request, including total and database time for each action. This helps identify slow or resource-intensive operations, especially if your requests were boxcarred.</p>
+        <ul>
+          <li>Shows top-level summary fields (version, request, actionsTotal, overhead).</li>
+          <li>Breaks down each action with total and DB time.</li>
+          <li>Displayed side-by-side with timing data in the expanded row.</li>
+        </ul>
+      </div>
+    </div>
+    <!-- Add more sections here as needed -->
+  </div>
+</body>
+</html>

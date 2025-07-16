@@ -16,7 +16,8 @@ export default defineConfig({
         { src: "icon128.png", dest: "." },
         { src: "devtools.html", dest: "." },
         { src: "devtools.js", dest: "." },
-      ],
+        { src: "info.html", dest: "." },
+      ], 
     }),
   ],
   build: {

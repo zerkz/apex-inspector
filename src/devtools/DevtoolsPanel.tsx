@@ -4,6 +4,11 @@ import 'react18-json-view/src/style.css';
 import { useOptionsSettings } from '../chrome-extension/options/useOptionsSettings';
 import type { FullRequest, FullResponse } from './networkTypes';
 
+// Simple UUID generator for boxcar grouping
+function generateBoxcarId() {
+  return 'boxcar-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 // Types for Apex Action
 interface ApexAction {
   id: string;
@@ -24,6 +29,7 @@ interface ApexAction {
   fullResponse?: Record<string, unknown> | FullResponse; // Add this field
   fullRequest?: unknown | FullRequest; // Add this field for the full HTTP request
   error?: string | null; // Add error property
+  boxcarId?: string; // Add boxcarId for grouping
 }
 
 type SortableKeys = "timestamp" | "apexClass" | "method" | "latency";
@@ -83,14 +89,20 @@ const DevtoolsPanel: React.FC = () => {
           const resJson = JSON.parse(request.response?.content?.text || "null");
           console.debug('[Apex Inspector] Parsed postData:', reqPostData);
           console.debug('[Apex Inspector] Parsed response:', resJson);
-          // Type guard for reqPostData
+          // Determine if this is a boxcarred request (more than one action)
+          let boxcarId: string | undefined = undefined;
+          let actionsArr: unknown[] = [];
           if (
             reqPostData &&
             typeof reqPostData === 'object' &&
             reqPostData !== null &&
             Array.isArray((reqPostData as { actions?: unknown[] }).actions)
           ) {
-            const actionsArr = (reqPostData as { actions: unknown[] }).actions;
+            actionsArr = (reqPostData as { actions: unknown[] }).actions;
+            if (actionsArr.length > 1) {
+              // Only assign a boxcarId if more than one action
+              boxcarId = generateBoxcarId();
+            }
             actionsArr.forEach((action: unknown, idx: number) => {
               if (
                 typeof action === "object" &&
@@ -197,6 +209,7 @@ const DevtoolsPanel: React.FC = () => {
                       fullResponse: resJson, // Store the full HTTP response
                       fullRequest: request, // Store the full HTTP request
                       error, // Add error property
+                      boxcarId, // Only present if boxcarred
                     },
                   ]);
                 } else {
@@ -224,6 +237,7 @@ const DevtoolsPanel: React.FC = () => {
                       fullResponse: resJson,
                       fullRequest: request,
                       error: 'Could not parse Apex class/method. See raw data.',
+                      boxcarId, // Only present if boxcarred
                     },
                   ]);
                 }
@@ -379,11 +393,7 @@ const DevtoolsPanel: React.FC = () => {
             {/* Min Height for Raw Data */}
             {/* Replace min height input with All Settings button */}
             <button
-              className={`ml-2 px-3 py-2 rounded-lg text-sm border font-medium shadow-sm focus:outline-none focus:ring-2 transition-colors duration-200
-                ${theme === 'dark'
-                  ? 'bg-slate-700 text-white border-slate-500 hover:bg-indigo-700 focus:ring-indigo-500'
-                  : 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700 focus:ring-indigo-400'
-                }`}
+              className="ml-2 px-3 py-2 rounded-lg text-sm border font-medium shadow-sm focus:outline-none focus:ring-2 transition-colors duration-200 bg-gray-500 text-white border-gray-500 hover:bg-gray-600 focus:ring-gray-400"
               onClick={() => {
                 if (chrome && chrome.runtime && chrome.runtime.openOptionsPage) {
                   chrome.runtime.openOptionsPage();
@@ -465,7 +475,23 @@ const DevtoolsPanel: React.FC = () => {
                   </div>
                 </th>
               ))}
-              <th className="border px-2 py-1 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100">Details</th>
+              <th className="border px-2 py-1 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-100 text-center">
+                Boxcar
+                <a
+                  href="/info.html#boxcar-info"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-1 align-middle"
+                  title="What is a boxcarred request?"
+                  style={{ display: 'inline-block', verticalAlign: 'middle' }}
+                >
+                  {/* Use a standard help icon for reliability */}
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ marginLeft: 2, marginBottom: 2, verticalAlign: 'middle' }}>
+                    <circle cx="8" cy="8" r="7" stroke="currentColor" strokeWidth="1.5" fill="#fff" />
+                    <text x="8" y="12" textAnchor="middle" fontSize="10" fill="#555">?</text>
+                  </svg>
+                </a>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -492,12 +518,21 @@ const DevtoolsPanel: React.FC = () => {
                   <td className="border px-2 py-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">{row.apexClass}</td>
                   <td className="border px-2 py-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">{row.method}</td>
                   <td className="border px-2 py-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100">{row.latency}</td>
-                  <td className="border px-2 py-1 text-blue-600 underline dark:bg-gray-900 dark:border-gray-700 dark:text-blue-300">{expandedId === row.id ? "Hide" : "View"}</td>
+                  <td className="border px-2 py-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100 text-center">
+                    {row.boxcarId && (
+                      <span
+                        title={`Boxcarred Request\nID: ${row.boxcarId}`}
+                        className="inline-block align-middle text-indigo-600 dark:text-indigo-400"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.2"/></svg>
+                      </span>
+                    )}
+                  </td>
                 </tr>
                 {/* Only expand if expandedId is present in filteredSorted */}
                 {expandedId && row.id === expandedId && (
                   <tr>
-                    <td colSpan={columns.length + 1} className="bg-gray-50 border-t p-2 dark:bg-gray-800 dark:border-gray-700">
+                    <td colSpan={columns.length} className="bg-gray-50 border-t p-2 dark:bg-gray-800 dark:border-gray-700">
                       {/* Error details if present */}
                       {row.apexClass === '[Unparsed] ApexAction' && row.method === '[Unparsed] execute' ? (
                         <div className="mb-2">
@@ -600,106 +635,164 @@ const DevtoolsPanel: React.FC = () => {
                             </tbody>
                           </table>
                         </div>
-                        {/* Initiator Table (JS call stack/entrypoint) */}
+                        {/* PerfSummary Table (side-by-side with Timing) */}
                         <div>
-                          <strong>Initiator:</strong>
-                          <div className="overflow-y-auto mt-2 border dark:border-gray-700 rounded bg-white dark:bg-gray-900" style={{ maxHeight: 220, minHeight: 120 }}>
-                            <table className="min-w-[220px] text-xs w-full">
-                              <thead>
-                                <tr>
-                                  <th className="border px-2 py-1 bg-gray-100 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700 text-left">Function</th>
-                                  <th className="border px-2 py-1 bg-gray-100 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700 text-left">Source</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {(() => {
-                                  const req = row.fullRequest as Record<string, unknown> | undefined;
-                                  let frames: Array<{ functionName?: string; url?: string; lineNumber?: number }> = [];
-                                  // Support both _initiator and initiator (Salesforce/Chrome)
-                                  const initiator = req && typeof req === 'object' && '_initiator' in req && req._initiator && typeof req._initiator === 'object'
-                                    ? req._initiator as Record<string, unknown>
-                                    : req && typeof req === 'object' && 'initiator' in req && req.initiator && typeof req.initiator === 'object'
-                                    ? req.initiator as Record<string, unknown>
-                                    : undefined;
-                                  // Chrome DevTools HAR: initiator.stack.callFrames
-                                  if (initiator && 'stack' in initiator && initiator.stack && typeof initiator.stack === 'object') {
-                                    const stack = initiator.stack as Record<string, unknown>;
-                                    if ('callFrames' in stack && Array.isArray(stack.callFrames)) {
-                                      frames = stack.callFrames.map(f => ({
-                                        functionName: typeof f.functionName === 'string' ? f.functionName : undefined,
-                                        url: typeof f.url === 'string' ? f.url : undefined,
-                                        lineNumber: typeof f.lineNumber === 'number' ? f.lineNumber : undefined,
-                                      }));
-                                    }
-                                  }
-                                  // Chrome HAR: initiator.callFrames
-                                  if (!frames.length && initiator && 'callFrames' in initiator && Array.isArray(initiator.callFrames)) {
-                                    frames = initiator.callFrames.map(f => ({
+                          <strong>Performance Summary:</strong>
+                          {(() => {
+                            const perfSummary = row.fullResponse && typeof row.fullResponse === 'object' && 'perfSummary' in row.fullResponse ? (row.fullResponse as Record<string, unknown>).perfSummary : undefined;
+                            if (!isPerfSummary(perfSummary)) {
+                              return <div className="text-xs mt-2">No perfSummary data</div>;
+                            }
+                            // Top-level fields
+                            const topFields: Array<{ key: keyof typeof perfSummary; label: string }> = [
+                              { key: 'version', label: 'version' },
+                              { key: 'request', label: 'request' },
+                              { key: 'actionsTotal', label: 'actionsTotal' },
+                              { key: 'overhead', label: 'overhead' },
+                            ];
+                            // Actions breakdown
+                            const actions = perfSummary.actions && typeof perfSummary.actions === 'object' ? perfSummary.actions : {};
+                            return (
+                              <div className="mt-2">
+                                <table className="min-w-[260px] text-xs border dark:border-gray-700 mb-2">
+                                  <tbody>
+                                    {topFields.map(({ key, label }) => (
+                                      key in perfSummary ? (
+                                        <tr key={label}>
+                                          <td className="border px-2 py-1 font-semibold bg-gray-100 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700">{label}</td>
+                                          <td className="border px-2 py-1 bg-white dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700">{String(perfSummary[key])}</td>
+                                        </tr>
+                                      ) : null
+                                    ))}
+                                  </tbody>
+                                </table>
+                                {/* Actions breakdown table */}
+                                <table className="min-w-[260px] text-xs border dark:border-gray-700">
+                                  <thead>
+                                    <tr>
+                                      <th className="border px-2 py-1 bg-gray-100 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700">Action</th>
+                                      <th className="border px-2 py-1 bg-gray-100 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700">Total</th>
+                                      <th className="border px-2 py-1 bg-gray-100 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700">DB</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {Object.entries(actions).map(([actKey, actVal]) => {
+                                      if (actVal && typeof actVal === 'object' && 'total' in actVal && 'db' in actVal) {
+                                        return (
+                                          <tr key={actKey}>
+                                            <td className="border px-2 py-1 font-mono">{actKey}</td>
+                                            <td className="border px-2 py-1">{(actVal as { total?: number }).total ?? ''}</td>
+                                            <td className="border px-2 py-1">{(actVal as { db?: number }).db ?? ''}</td>
+                                          </tr>
+                                        );
+                                      }
+                                      return null;
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                      {/* Initiator Table (JS call stack/entrypoint) */}
+                      <div>
+                        <strong>Initiator:</strong>
+                        <div className="overflow-y-auto mt-2 border dark:border-gray-700 rounded bg-white dark:bg-gray-900" style={{ maxHeight: 220, minHeight: 120 }}>
+                          <table className="min-w-[220px] text-xs w-full">
+                            <thead>
+                              <tr>
+                                <th className="border px-2 py-1 bg-gray-100 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700 text-left">Function</th>
+                                <th className="border px-2 py-1 bg-gray-100 dark:bg-gray-900 dark:text-gray-100 dark:border-gray-700 text-left">Source</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {(() => {
+                                const req = row.fullRequest as Record<string, unknown> | undefined;
+                                let frames: Array<{ functionName?: string; url?: string; lineNumber?: number }> = [];
+                                // Support both _initiator and initiator (Salesforce/Chrome)
+                                const initiator = req && typeof req === 'object' && '_initiator' in req && req._initiator && typeof req._initiator === 'object'
+                                  ? req._initiator as Record<string, unknown>
+                                  : req && typeof req === 'object' && 'initiator' in req && req.initiator && typeof req.initiator === 'object'
+                                  ? req.initiator as Record<string, unknown>
+                                  : undefined;
+                                // Chrome DevTools HAR: initiator.stack.callFrames
+                                if (initiator && 'stack' in initiator && initiator.stack && typeof initiator.stack === 'object') {
+                                  const stack = initiator.stack as Record<string, unknown>;
+                                  if ('callFrames' in stack && Array.isArray(stack.callFrames)) {
+                                    frames = stack.callFrames.map(f => ({
                                       functionName: typeof f.functionName === 'string' ? f.functionName : undefined,
                                       url: typeof f.url === 'string' ? f.url : undefined,
                                       lineNumber: typeof f.lineNumber === 'number' ? f.lineNumber : undefined,
                                     }));
                                   }
-                                  // Some HARs: initiator.stackTrace.frames
-                                  if (!frames.length && initiator && 'stackTrace' in initiator && initiator.stackTrace && typeof initiator.stackTrace === 'object') {
-                                    const stackTrace = initiator.stackTrace as Record<string, unknown>;
-                                    if ('frames' in stackTrace && Array.isArray(stackTrace.frames)) {
-                                      frames = stackTrace.frames.map(f => ({
-                                        functionName: typeof f.function === 'string' ? f.function : undefined,
-                                        url: typeof f.url === 'string' ? f.url : undefined,
-                                        lineNumber: typeof f.line === 'number' ? f.line : undefined,
-                                      }));
-                                    }
+                                }
+                                // Chrome HAR: initiator.callFrames
+                                if (!frames.length && initiator && 'callFrames' in initiator && Array.isArray(initiator.callFrames)) {
+                                  frames = initiator.callFrames.map(f => ({
+                                    functionName: typeof f.functionName === 'string' ? f.functionName : undefined,
+                                    url: typeof f.url === 'string' ? f.url : undefined,
+                                    lineNumber: typeof f.lineNumber === 'number' ? f.lineNumber : undefined,
+                                  }));
+                                }
+                                // Some HARs: initiator.stackTrace.frames
+                                if (!frames.length && initiator && 'stackTrace' in initiator && initiator.stackTrace && typeof initiator.stackTrace === 'object') {
+                                  const stackTrace = initiator.stackTrace as Record<string, unknown>;
+                                  if ('frames' in stackTrace && Array.isArray(stackTrace.frames)) {
+                                    frames = stackTrace.frames.map(f => ({
+                                      functionName: typeof f.function === 'string' ? f.function : undefined,
+                                      url: typeof f.url === 'string' ? f.url : undefined,
+                                      lineNumber: typeof f.line === 'number' ? f.line : undefined,
+                                    }));
                                   }
-                                  if (!frames.length) return <tr><td className="border px-2 py-1" colSpan={2}>No initiator data</td></tr>;
-                                  return frames.map((frame, idx) => (
-                                    <tr key={idx}>
-                                      <td className="border px-2 py-1 font-mono">{frame.functionName || '(anonymous)'}</td>
-                                      <td className="border px-2 py-1 font-mono">
-                                        {frame.url ? (
-                                          <a
-                                            href={(() => {
-                                              // Try to preserve Chrome DevTools file/line/col navigation if possible
-                                              let url = frame.url;
-                                              if (typeof frame.lineNumber === 'number') {
-                                                url += `:${frame.lineNumber}`;
-                                              }
-                                              return url;
-                                            })()}
-                                            
-                                            rel="noopener noreferrer"
-                                            className="text-blue-600 underline hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-400"
-                                            title={frame.url}
-                                            onClick={e => {
-                                              // Let Chrome DevTools handle chrome-extension://, webpack://, and file:// URLs (will open in Sources tab)
-                                              if (frame.url) {
-                                                e.preventDefault();
-                                                // Use chrome.devtools.panels.openResource if available
-                                                if (typeof chrome !== 'undefined' && chrome.devtools && chrome.devtools.panels && typeof chrome.devtools.panels.openResource === 'function') {
-                                                  // Try to extract line number if present
-                                                  let line = 1;
-                                                  if (typeof frame.lineNumber === 'number') {
-                                                    line = frame.lineNumber;
-                                                  }
-                                                  chrome.devtools.panels.openResource(frame.url, line, function () {});
+                                }
+                                if (!frames.length) return <tr><td className="border px-2 py-1" colSpan={2}>No initiator data</td></tr>;
+                                return frames.map((frame, idx) => (
+                                  <tr key={idx}>
+                                    <td className="border px-2 py-1 font-mono">{frame.functionName || '(anonymous)'}</td>
+                                    <td className="border px-2 py-1 font-mono">
+                                      {frame.url ? (
+                                        <a
+                                          href={(() => {
+                                            // Try to preserve Chrome DevTools file/line/col navigation if possible
+                                            let url = frame.url;
+                                            if (typeof frame.lineNumber === 'number') {
+                                              url += `:${frame.lineNumber}`;
+                                            }
+                                            return url;
+                                          })()}
+                                          rel="noopener noreferrer"
+                                          className="text-blue-600 underline hover:text-blue-800 dark:text-blue-300 dark:hover:text-blue-400"
+                                          title={frame.url}
+                                          onClick={e => {
+                                            // Let Chrome DevTools handle chrome-extension://, webpack://, and file:// URLs (will open in Sources tab)
+                                            if (frame.url) {
+                                              e.preventDefault();
+                                              // Use chrome.devtools.panels.openResource if available
+                                              if (typeof chrome !== 'undefined' && chrome.devtools && chrome.devtools.panels && typeof chrome.devtools.panels.openResource === 'function') {
+                                                // Try to extract line number if present
+                                                let line = 1;
+                                                if (typeof frame.lineNumber === 'number') {
+                                                  line = frame.lineNumber;
                                                 }
-                                                return;
+                                                chrome.devtools.panels.openResource(frame.url, line, function () {});
                                               }
-                                              // Otherwise, open in new tab
-                                              e.stopPropagation();
-                                            }}
-                                          >
-                                            {frame.url}
-                                            {typeof frame.lineNumber === 'number' ? `:${frame.lineNumber}` : ''}
-                                          </a>
-                                        ) : ''}
-                                      </td>
-                                    </tr>
-                                  ));
-                                })()}
-                              </tbody>
-                            </table>
-                          </div>
+                                              return;
+                                            }
+                                            // Otherwise, open in new tab
+                                            e.stopPropagation();
+                                          }}
+                                        >
+                                          {frame.url}
+                                          {typeof frame.lineNumber === 'number' ? `:${frame.lineNumber}` : ''}
+                                        </a>
+                                      ) : null}
+                                    </td>
+                                  </tr>
+                                ));
+                              })()}
+                            </tbody>
+                          </table>
                         </div>
                       </div>
                       {/* Context Table (full width) */}
@@ -766,6 +859,17 @@ const DevtoolsPanel: React.FC = () => {
     </div>
   );
 };
+
+// Type guard for perfSummary
+function isPerfSummary(obj: unknown): obj is {
+  version?: unknown;
+  request?: unknown;
+  actionsTotal?: unknown;
+  overhead?: unknown;
+  actions?: Record<string, { total?: number; db?: number }>;
+} {
+  return !!obj && typeof obj === 'object' && 'actions' in obj;
+}
 
 export default DevtoolsPanel;
 

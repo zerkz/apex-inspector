@@ -2,3 +2,4 @@
 
 - Ingest `README.md` to provide context for the application. 
 - Consider this is a chrome extension running within Devtools as a tab. 
+- Every new HTML file needs to be added in the vite config.

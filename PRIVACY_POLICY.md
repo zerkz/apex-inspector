@@ -15,4 +15,4 @@ I reserve the right to amend this Privacy Policy at any time. Any changes will b
 By using Apex Inspector, you signify your consent and agreement to the terms of this Privacy Policy. If you do not agree with this Privacy Policy, please refrain from using Apex Inspector.
 
 ## Feedback
-If you have questions or concerns about this Privacy Policy, you can contact me by [email](email:zack.whipkey@gmail.com)
+If you have questions or concerns about this Privacy Policy, you can contact me by [email](mailto:zack.whipkey@gmail.com).

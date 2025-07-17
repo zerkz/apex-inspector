@@ -1,12 +1,13 @@
 # Apex Inspector Chrome DevTools Extension
 
-Apex Inspector is a Chrome DevTools extension for Salesforce developers that provides deep visibility into Apex HTTP calls made via the `/aura` endpoint, specifically those using `aura.ApexAction.execute`. It is designed to help you debug, inspect, and analyze Salesforce Lightning network activity directly from your browser's DevTools.
+Apex Inspector is a Chrome DevTools extension for Salesforce developers that provides deep visibility into Apex HTTP calls made via the `/aura` endpoint, specifically those using `aura.ApexAction.execute` (aka `@AuraEnabled` apex methods). It is designed to help you debug, inspect, and analyze Apex network activity directly from your browser's DevTools. This can be very helpful if you are developing LWCs (Lightning Web Components).
 
 ## Features
 
 - **Automatic Capture of Apex Calls:**
   - Monitors all network requests to `/aura` and filters for those containing `aura.ApexAction.execute`.
   - Supports both single and boxcarred (batched) Apex actions.
+  - Calls can be sorted, or filtered via the request body or response body contents.
 
 - **Tabular View of Calls:**
   - Displays a table of captured Apex calls, including:
@@ -18,28 +19,21 @@ Apex Inspector is a Chrome DevTools extension for Salesforce developers that pro
 
 - **Expandable Details:**
   - Click any row to expand and view:
-    - Request parameters (pretty-printed JSON)
-    - Response, with collapsible sections for `actions` and `context`
-    - Raw request object (toggleable)
+    - Request body 
+    - Response body 
+    - Timing/Performance tables
+    - Raw Data
 
 - **Debug Log:**
   - Toggleable debug log area to view internal extension messages and errors.
   - Log is cleared with the "Clear" button.
 
-- **Boxcarred Request Support:**
-  - Each action in a boxcarred request is shown as its own row, grouped visually.
-  - Grouping is indicated with a color and icon.
-
-- **Clear Button:**
-  - Instantly clears all captured calls and debug logs.
-
-- **No Build Tools Required:**
-  - The extension is implemented in plain JavaScript and HTML for maximum compatibility and ease of maintenance.
-
 ## Usage
 
 1. **Install the Extension:**
-   - Load the extension as an unpacked extension in Chrome via `chrome://extensions`.
+   * Install the extension from the Chrome Extension store!  
+    OR
+   * Load the extension as an unpacked extension in Chrome via `chrome://extensions`.
 
 2. **Trigger Apex Calls:**
    - Open DevTools and select the "Apex Inspector" panel.
@@ -53,12 +47,7 @@ Apex Inspector is a Chrome DevTools extension for Salesforce developers that pro
 - Salesforce developers and admins working with Lightning components and Apex controllers.
 - Anyone needing to debug or analyze Salesforce network traffic in detail.
 
+## Why does this require "Read and change all your data on all websites"? 
+Unfortunately since this is a devtools extension, there's no way around it. Other similar tools, like the [React Devtools Extension](https://chromewebstore.google.com/detail/react-developer-tools/fmkadmapgofadopljbjfkapdkoienihi?hl=en) require the same permission. 
 
-
----
-
-**Tip:** Chrome DevTools extensions require a full DevTools window reload to pick up changes to the panel UI or logic. For fastest feedback, keep DevTools open and reload the panel after each change.
-
----
-
-**Note:** This extension does not require any build tools or frameworks. All logic and UI are implemented in plain JavaScript and HTML for simplicity and reliability.
+Thankfully you have the source code here to review if you have security concerns!

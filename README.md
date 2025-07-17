@@ -24,9 +24,9 @@ Apex Inspector is a Chrome DevTools extension for Salesforce developers that pro
     - Timing/Performance tables
     - Raw Data
 
-- **Debug Log:**
-  - Toggleable debug log area to view internal extension messages and errors.
-  - Log is cleared with the "Clear" button.
+- **Responsive UI** 
+  - Useful no matter what screen size you are on.
+  - Dark/Light themes available, along with numerous JSON themes.
 
 ## Usage
 
@@ -42,6 +42,17 @@ Apex Inspector is a Chrome DevTools extension for Salesforce developers that pro
 3. **Inspect and Debug:**
    - Click rows to expand details, view parameters, responses, and raw requests.
    - Use the debug log for troubleshooting extension behavior.
+
+## Keybindings/Shortcuts
+
+| Key | Action | Context |
+|-----|--------|---------|
+| ← | Navigate to previous row | Table view or detail view |
+| → | Navigate to next row | Table view or detail view |
+| Del/⌫ | Close detail view and return to table | Detail view only |
+| Click | Open/close detail view for selected row | Table view |
+
+**Note:** Arrow key navigation automatically opens the detail view for the selected row.
 
 ## Who is this for?
 - Salesforce developers and admins working with Lightning components and Apex controllers.

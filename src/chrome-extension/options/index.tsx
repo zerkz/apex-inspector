@@ -65,7 +65,7 @@ const Options = () => {
         {/* About Card */}
         <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm max-w-md w-full flex flex-col justify-between">
           <h2 className="text-xl font-bold mb-4">About</h2>
-          <div className="text-base text-gray-700 dark:text-gray-200 mb-2">Made with <span className="text-red-500">❤️</span> by <a href="https://www.zdware.com" target="_blank" className="underline hover:text-blue-600">ZDWare</a></div>
+          <div className="text-base text-gray-700 dark:text-gray-200 mb-2">Made with <span className="text-red-500">❤️</span> by <a href="https://www.zdware.com/about/" target="_blank" className="underline hover:text-blue-600">ZDWare</a></div>
           <div className="flex flex-col space-y-2">
             <a href="https://github.com/zerkz/apex-inspector" target="_blank" className="underline hover:text-blue-600 text-base text-gray-700 dark:text-gray-200">Project Homepage</a>
             <a href="https://github.com/zerkz/apex-inspector/issues" target="_blank" className="underline hover:text-blue-600 text-base text-gray-700 dark:text-gray-200">Report an Issue</a>

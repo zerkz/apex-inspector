@@ -2,6 +2,8 @@
 
 Apex Inspector is a Chrome DevTools extension for Salesforce developers that provides deep visibility into Apex HTTP calls made via the `/aura` endpoint, specifically those using `aura.ApexAction.execute` (aka `@AuraEnabled` apex methods). It is designed to help you debug, inspect, and analyze Apex network activity directly from your browser's DevTools. This can be very helpful if you are developing LWCs (Lightning Web Components).
 
+![apex-inspector-example](https://github.com/user-attachments/assets/d836282b-4dc6-42c2-8941-e60efb61afa4)
+
 ## Features
 
 - **Automatic Capture of Apex Calls:**

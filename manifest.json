@@ -3,10 +3,6 @@
   "name": "Apex Inspector",
   "version": "1.0.0",
   "description": "Extension for Chrome Devtools specifically for `@AuraEnabled' (/aura) Apex traffic on the Salesforce Platform.",
-  "permissions": [
-    "activeTab",
-    "clipboardWrite"
-  ],
   "icons": {
     "16": "icon16.png",
     "32": "icon32.png",

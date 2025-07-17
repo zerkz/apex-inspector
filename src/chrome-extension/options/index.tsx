@@ -72,6 +72,49 @@ const Options = () => {
           </div>
         </div>
       </div>
+
+      {/* Keyboard Shortcuts Card */}
+      <div className="max-w-4xl mx-auto">
+        <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <h2 className="text-xl font-bold mb-4">Keyboard Shortcuts</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-200 dark:border-gray-600">
+                  <th className="text-left py-2 px-3 font-semibold">Key</th>
+                  <th className="text-left py-2 px-3 font-semibold">Action</th>
+                  <th className="text-left py-2 px-3 font-semibold">Context</th>
+                </tr>
+              </thead>
+              <tbody className="text-gray-700 dark:text-gray-300">
+                <tr className="border-b border-gray-100 dark:border-gray-700">
+                  <td className="py-2 px-3 font-mono bg-gray-100 dark:bg-gray-700 rounded text-center w-20">←</td>
+                  <td className="py-2 px-3">Navigate to previous row</td>
+                  <td className="py-2 px-3">Table view or detail view</td>
+                </tr>
+                <tr className="border-b border-gray-100 dark:border-gray-700">
+                  <td className="py-2 px-3 font-mono bg-gray-100 dark:bg-gray-700 rounded text-center w-20">→</td>
+                  <td className="py-2 px-3">Navigate to next row</td>
+                  <td className="py-2 px-3">Table view or detail view</td>
+                </tr>
+                <tr className="border-b border-gray-100 dark:border-gray-700">
+                  <td className="py-2 px-3 font-mono bg-gray-100 dark:bg-gray-700 rounded text-center w-20">Del/⌫</td>
+                  <td className="py-2 px-3">Close detail view and return to table</td>
+                  <td className="py-2 px-3">Detail view only</td>
+                </tr>
+                <tr>
+                  <td className="py-2 px-3 font-mono bg-gray-100 dark:bg-gray-700 rounded text-center w-20">Click</td>
+                  <td className="py-2 px-3">Open/close detail view for selected row</td>
+                  <td className="py-2 px-3">Table view</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 text-xs text-gray-500 dark:text-gray-400">
+            <p><strong>Note:</strong> Arrow key navigation automatically opens the detail view for the selected row.</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

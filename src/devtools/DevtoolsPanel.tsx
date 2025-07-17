@@ -313,12 +313,12 @@ const DevtoolsPanel: React.FC = () => {
     return data;
   }, [actions, filter, sortKey, sortAsc, bodySearch]);
 
-  // Keyboard navigation for left/right arrows and escape
+  // Keyboard navigation for left/right arrows and delete/backspace
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (filteredSorted.length === 0) return;
       
-      if (e.key === 'Escape' && expandedId) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && expandedId) {
         setExpandedId(null);
         setSelectedIdx(null);
         return;
@@ -382,9 +382,34 @@ const DevtoolsPanel: React.FC = () => {
         return;
       }
       const json = JSON.stringify(data, null, 2);
+      
+      // Try modern clipboard API first
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(json).then(() => {
+          // Show toast if requested
+          if (toastId && evt) {
+            const rect = (evt.target as HTMLElement).getBoundingClientRect();
+            setCopiedToast({ id: toastId, x: rect.left + rect.width / 2, y: rect.top });
+            setTimeout(() => setCopiedToast(null), 1200);
+          }
+        }).catch(() => {
+          // Fall back to legacy method
+          fallbackCopyToClipboard(json, toastId, evt);
+        });
+      } else {
+        // Fall back to legacy method
+        fallbackCopyToClipboard(json, toastId, evt);
+      }
+    } catch {
+      // Do nothing on failure
+    }
+  }
+
+  function fallbackCopyToClipboard(text: string, toastId?: string, evt?: React.MouseEvent) {
+    try {
       // Legacy workaround: use textarea + execCommand('copy')
       const textarea = document.createElement('textarea');
-      textarea.value = json;
+      textarea.value = text;
       textarea.setAttribute('readonly', '');
       textarea.style.position = 'absolute';
       textarea.style.left = '-9999px';
@@ -392,6 +417,7 @@ const DevtoolsPanel: React.FC = () => {
       textarea.select();
       document.execCommand('copy');
       document.body.removeChild(textarea);
+      
       // Show toast if requested
       if (toastId && evt) {
         const rect = (evt.target as HTMLElement).getBoundingClientRect();
@@ -531,32 +557,37 @@ const DevtoolsPanel: React.FC = () => {
                 {selectedRow.error && <span title="Apex Error" className="text-red-600 dark:text-red-400">⛔</span>}
                 <h2 className="text-lg font-semibold">{selectedRow.apexClass}.{selectedRow.method}</h2>
                 {selectedRow.boxcarId && (
-                  <span
-                    title={`Boxcarred Request\nID: ${selectedRow.boxcarId}`}
-                    className="inline-block align-middle text-indigo-600 dark:text-indigo-400"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.2"/></svg>
-                  </span>
+                  <div className="relative group inline-block align-middle">
+                    <span className="text-indigo-600 dark:text-indigo-400 cursor-help">
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.2"/></svg>
+                    </span>
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                      Boxcarred Request<br />ID: {selectedRow.boxcarId}
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
+                    </div>
+                  </div>
                 )}
               </div>
               <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
                 <span>Time: {new Date(selectedRow.timestamp).toLocaleTimeString([], { timeZoneName: 'short' })}</span>
                 <span>Latency: {selectedRow.latency}ms</span>
-                {selectedRow.error && <span className="text-red-600 dark:text-red-400">Error: {selectedRow.error}</span>}
               </div>
             </div>
-            <button
-              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors duration-200"
-              onClick={() => {
-                setExpandedId(null);
-                setSelectedIdx(null);
-              }}
-              title="Close detail view (Escape)"
-            >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors duration-200"
+                onClick={() => {
+                  setExpandedId(null);
+                  setSelectedIdx(null);
+                }}
+                title="Close detail view (Delete or Backspace key)"
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              <span className="text-xs text-gray-500 dark:text-gray-400">(Del/⌫)</span>
+            </div>
           </div>
 
           {/* Detail content */}
@@ -628,9 +659,9 @@ const DevtoolsPanel: React.FC = () => {
                 {/* Timing/Performance section */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                   {/* Timing Table */}
-                  <div>
+                  <div className="overflow-visible">
                     <h3 className="text-lg font-semibold mb-3">Timing</h3>
-                    <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg overflow-hidden">
+                    <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg overflow-hidden relative">
                       <table className="w-full text-sm">
                         <tbody>
                           {(() => {
@@ -664,10 +695,19 @@ const DevtoolsPanel: React.FC = () => {
                           })()}
                           {typeof selectedRow.latency === 'number' ? (
                             <tr>
-                              <td className="border px-3 py-2 font-semibold bg-gray-50 dark:bg-gray-800 dark:border-gray-700">Total Latency</td>
+                              <td className="border px-3 py-2 font-semibold bg-gray-50 dark:bg-gray-800 dark:border-gray-700">
+                                Total Latency
+                              </td>
                               <td className="border px-3 py-2 dark:border-gray-700">{selectedRow.latency} ms</td>
                             </tr>
                           ) : null}
+                          {selectedRow.boxcarId && (
+                            <tr>
+                              <td className="border px-3 py-2 text-xs text-gray-600 dark:text-gray-400 italic dark:border-gray-700" colSpan={2}>
+                                This latency represents the total time for all actions in this boxcarred request, not just the current action being viewed.
+                              </td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -687,7 +727,12 @@ const DevtoolsPanel: React.FC = () => {
                         { key: 'actionsTotal', label: 'Actions Total' },
                         { key: 'overhead', label: 'Overhead' },
                       ];
-                      const actions = perfSummary.actions && typeof perfSummary.actions === 'object' ? perfSummary.actions : {};
+                      const allActions = perfSummary.actions && typeof perfSummary.actions === 'object' ? perfSummary.actions : {};
+                      
+                      // Filter to show only the current action's performance data
+                      const currentActionId = selectedRow.id;
+                      const currentActionPerf = currentActionId && currentActionId in allActions ? { [currentActionId]: allActions[currentActionId] } : {};
+                      
                       return (
                         <div className="space-y-4">
                           <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg overflow-hidden">
@@ -704,31 +749,35 @@ const DevtoolsPanel: React.FC = () => {
                               </tbody>
                             </table>
                           </div>
-                          <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg overflow-hidden">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr>
-                                  <th className="border px-3 py-2 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-left">Action</th>
-                                  <th className="border px-3 py-2 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-left">Total</th>
-                                  <th className="border px-3 py-2 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-left">DB</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {Object.entries(actions).map(([actKey, actVal]) => {
-                                  if (actVal && typeof actVal === 'object' && 'total' in actVal && 'db' in actVal) {
-                                    return (
-                                      <tr key={actKey}>
-                                        <td className="border px-3 py-2 font-mono dark:border-gray-700">{actKey}</td>
-                                        <td className="border px-3 py-2 dark:border-gray-700">{(actVal as { total?: number }).total ?? ''}</td>
-                                        <td className="border px-3 py-2 dark:border-gray-700">{(actVal as { db?: number }).db ?? ''}</td>
-                                      </tr>
-                                    );
-                                  }
-                                  return null;
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
+                          {Object.keys(currentActionPerf).length > 0 ? (
+                            <div className="bg-white dark:bg-gray-900 border dark:border-gray-700 rounded-lg overflow-hidden">
+                              <table className="w-full text-sm">
+                                <thead>
+                                  <tr>
+                                    <th className="border px-3 py-2 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-left">Action ID</th>
+                                    <th className="border px-3 py-2 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-left">Total (ms)</th>
+                                    <th className="border px-3 py-2 bg-gray-50 dark:bg-gray-800 dark:border-gray-700 text-left">DB (ms)</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {Object.entries(currentActionPerf).map(([actKey, actVal]) => {
+                                    if (actVal && typeof actVal === 'object' && 'total' in actVal && 'db' in actVal) {
+                                      return (
+                                        <tr key={actKey}>
+                                          <td className="border px-3 py-2 font-mono dark:border-gray-700">{actKey}</td>
+                                          <td className="border px-3 py-2 dark:border-gray-700">{(actVal as { total?: number }).total ?? ''}</td>
+                                          <td className="border px-3 py-2 dark:border-gray-700">{(actVal as { db?: number }).db ?? ''}</td>
+                                        </tr>
+                                      );
+                                    }
+                                    return null;
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="text-sm text-gray-500 dark:text-gray-400">No performance data available for this action</div>
+                          )}
                         </div>
                       );
                     })()}
@@ -984,12 +1033,15 @@ const DevtoolsPanel: React.FC = () => {
                   </td>
                   <td className="border px-2 py-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100 text-center w-20">
                     {row.boxcarId && (
-                      <span
-                        title={`Boxcarred Request\nID: ${row.boxcarId}`}
-                        className="inline-block align-middle text-indigo-600 dark:text-indigo-400"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.2"/></svg>
-                      </span>
+                      <div className="relative group inline-block align-middle">
+                        <span className="text-indigo-600 dark:text-indigo-400 cursor-help">
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.2"/></svg>
+                        </span>
+                        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                          Boxcarred Request<br />ID: {row.boxcarId}
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
+                        </div>
+                      </div>
                     )}
                   </td>
                 </tr>

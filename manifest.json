@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Apex Inspector",
-  "version": "1.0",
-  "description": "Description of your extension.",
+  "version": "1.0.0",
+  "description": "Extension for Chrome Devtools specifically for `@AuraEnabled' (/aura) Apex traffic on the Salesforce Platform.",
   "permissions": [
     "activeTab",
     "clipboardWrite"

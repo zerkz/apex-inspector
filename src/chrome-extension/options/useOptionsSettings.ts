@@ -4,12 +4,14 @@ export type OptionsSettings = {
   theme: 'light' | 'dark';
   jsonViewTheme: 'default' | 'a11y' | 'github' | 'vscode' | 'atom' | 'winter-is-coming';
   minRawDataHeight?: number; // px, optional for backward compat
+  apexClassMappingsJson?: string; // JSON string from SF CLI SOQL query
 };
 
 const DEFAULTS: OptionsSettings = {
   theme: 'light',
   jsonViewTheme: 'default',
-  minRawDataHeight: 320,
+  minRawDataHeight: 320, 
+  apexClassMappingsJson: '', 
 };
 
 export function useOptionsSettings() {
@@ -19,11 +21,12 @@ export function useOptionsSettings() {
   useEffect(() => {
     const load = async () => {
       if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.get(['theme', 'jsonViewTheme', 'minRawDataHeight'], (result) => {
+        chrome.storage.local.get(['theme', 'jsonViewTheme', 'minRawDataHeight', 'apexClassMappingsJson'], (result) => {
           setSettings({
             theme: result.theme || DEFAULTS.theme,
             jsonViewTheme: result.jsonViewTheme || DEFAULTS.jsonViewTheme,
             minRawDataHeight: typeof result.minRawDataHeight === 'number' ? result.minRawDataHeight : DEFAULTS.minRawDataHeight,
+            apexClassMappingsJson: result.apexClassMappingsJson || DEFAULTS.apexClassMappingsJson,
           });
         });
       } else {
@@ -32,6 +35,7 @@ export function useOptionsSettings() {
           theme: (localStorage.getItem('theme') as 'light' | 'dark') || DEFAULTS.theme,
           jsonViewTheme: (localStorage.getItem('jsonViewTheme') as OptionsSettings['jsonViewTheme']) || DEFAULTS.jsonViewTheme,
           minRawDataHeight: Number(localStorage.getItem('minRawDataHeight')) || DEFAULTS.minRawDataHeight,
+          apexClassMappingsJson: localStorage.getItem('apexClassMappingsJson') || DEFAULTS.apexClassMappingsJson,
         });
       }
     };
@@ -49,6 +53,9 @@ export function useOptionsSettings() {
       localStorage.setItem('jsonViewTheme', updated.jsonViewTheme);
       if (typeof updated.minRawDataHeight === 'number') {
         localStorage.setItem('minRawDataHeight', String(updated.minRawDataHeight));
+      }
+      if (updated.apexClassMappingsJson !== undefined) {
+        localStorage.setItem('apexClassMappingsJson', updated.apexClassMappingsJson);
       }
     }
   };

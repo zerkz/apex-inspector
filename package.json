@@ -1,8 +1,17 @@
 {
-  "name": "chrome-extension-starter",
+  "name": "Apex Inspector",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "author": {
+    "name": "Zack Whipkey",
+    "email": "zack@zdware.com"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zerkz/apex-inspector.git"
+  },
   "scripts": {
     "dev": "npm run watch-build",
     "build": "tsc -b && vite build",

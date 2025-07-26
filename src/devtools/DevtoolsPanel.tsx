@@ -45,7 +45,7 @@ const columns: { key: SortableKeys; label: string }[] = [
 
 const DevtoolsPanel: React.FC = () => {
   const [settings, saveSettings] = useOptionsSettings();
-  const { theme, jsonViewTheme, minRawDataHeight = 320 } = settings;
+  const { theme, jsonViewTheme, minRawDataHeight = 320, apexClassMappingsJson = '' } = settings;
   const [actions, setActions] = useState<ApexAction[]>([]);
   // Use expandedId as the only source of truth for expanded row
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -56,6 +56,11 @@ const DevtoolsPanel: React.FC = () => {
   const [bodySearch, setBodySearch] = useState("");
 
   const jsonViewDark = theme === 'dark';
+
+  // Parse apex class mappings from settings
+  const apexClassMappings = useMemo(() => {
+    return parseApexClassMappings(apexClassMappingsJson);
+  }, [apexClassMappingsJson]);
 
   // Ensure <html> class is set for dark mode
   React.useEffect(() => {
@@ -69,7 +74,7 @@ const DevtoolsPanel: React.FC = () => {
     function handleMessage(event: MessageEvent) {
       // Debug: log all incoming messages
       console.debug('[Apex Inspector] Panel received message:', event.data);
-      if (event.data && event.data.type === "network" && event.data.request) {
+      if (event.data && (event.data.type === "network" || event.data.type === "lightning" || event.data.type === "community") && event.data.request) {
         try {
           const request = event.data.request;
           console.debug('[Apex Inspector] Panel processing network event:', request);
@@ -101,22 +106,115 @@ const DevtoolsPanel: React.FC = () => {
             if (responseText && contentType?.includes('application/json')) {
               resJson = JSON.parse(responseText);
             } else {
-              console.debug('[Apex Inspector] Response is not JSON, skipping parse. Content-Type:', contentType);
+              console.debug('[Apex Inspector] Response is not JSON or missing, will process request-only. Content-Type:', contentType);
             }
           } catch (responseError) {
-            console.debug('[Apex Inspector] Failed to parse response as JSON, skipping:', responseError);
+            console.debug('[Apex Inspector] Failed to parse response as JSON, will process request-only:', responseError);
             resJson = null;
           }
 
           console.debug('[Apex Inspector] Parsed postData:', reqPostData);
           console.debug('[Apex Inspector] Parsed response:', resJson);
           
-          // Skip processing if we don't have valid JSON response
-          if (!resJson || typeof resJson !== 'object') {
-            console.debug('[Apex Inspector] No valid JSON response found, skipping action processing');
+          // Check if this is a webruntime/community call (different structure)
+          const isWebruntimeCall = request.request.url.includes('/webruntime/api/apex/execute');
+          
+          // Skip processing if we don't have valid request data
+          if (!reqPostData || typeof reqPostData !== 'object') {
+            console.debug('[Apex Inspector] No valid request data found, skipping action processing');
             return;
           }
 
+          if (isWebruntimeCall) {
+            // Handle Community/Webruntime calls - completely different structure
+            console.debug('[Apex Inspector] Processing webruntime/community call');
+            
+            // For webruntime calls, the request data is directly in reqPostData
+            const webruntimeReq = reqPostData as {
+              namespace?: string;
+              classname?: string;
+              method?: string;
+              params?: Record<string, unknown>;
+            };
+            
+            const originalApexClass = webruntimeReq.classname || '[Unknown Class]';
+            const apexMethod = webruntimeReq.method || '[Unknown Method]';
+            const namespace = webruntimeReq.namespace;
+            
+            // Check if this is an obfuscated Community Cloud class name (starts with @)
+            const isObfuscated = originalApexClass.startsWith('@') && originalApexClass.includes('/');
+            let actualClassName = originalApexClass;
+            let helpTextInfo = null;
+            
+            if (isObfuscated) {
+              // Extract the ID part (after the /)
+              const idPart = originalApexClass.split('/')[1];
+              
+              // Try to resolve using the mappings
+              if (idPart && apexClassMappings.has(idPart)) {
+                actualClassName = apexClassMappings.get(idPart)!;
+                console.debug(`[Apex Inspector] Resolved obfuscated class ${originalApexClass} to ${actualClassName}`);
+              } else {
+                // Show the ID part but indicate it's obfuscated
+                actualClassName = idPart || originalApexClass;
+                helpTextInfo = {
+                  originalClassName: originalApexClass,
+                  note: 'Class name is obfuscated in Community Cloud. Configure Apex Class Mappings in settings to see real names.',
+                  needsMapping: true
+                };
+                console.debug(`[Apex Inspector] Could not resolve obfuscated class ${originalApexClass}, no mapping found for ID ${idPart}`);
+              }
+            }
+            
+            const fullClassName = namespace ? `${namespace}.${actualClassName}` : actualClassName;
+            
+            // Handle webruntime response which is typically direct JSON
+            let responseObj: Record<string, unknown> = {};
+            let error: string | null = null;
+            
+            if (resJson && typeof resJson === 'object') {
+              const webResponse = resJson as Record<string, unknown>;
+              responseObj = webResponse;
+              
+              // Check for errors in webruntime response
+              if (webResponse.error || webResponse.errors || webResponse.isError) {
+                error = 'Webruntime API error occurred';
+                if (typeof webResponse.error === 'string') {
+                  error = webResponse.error;
+                } else if (Array.isArray(webResponse.errors) && webResponse.errors.length > 0) {
+                  error = String(webResponse.errors[0]);
+                }
+              }
+            }
+            
+            setActions((prev) => [
+              ...prev,
+              {
+                id: `webruntime-${request.requestId || request.request.url}-${Date.now()}`,
+                timestamp: request.startedDateTime ? new Date(request.startedDateTime).getTime() : Date.now(),
+                apexClass: fullClassName,
+                method: apexMethod,
+                latency: request.time,
+                request: webruntimeReq.params || {},
+                response: responseObj,
+                rawRequest: reqPostData,
+                rawResponse: resJson || {},
+                context: helpTextInfo || {},
+                network: {
+                  requestId: request.requestId || request.request.url,
+                  url: request.request.url,
+                  latency: request.time,
+                },
+                fullResponse: resJson as Record<string, unknown>,
+                fullRequest: request,
+                error,
+                // No boxcarId for webruntime calls as they are typically single actions
+              },
+            ]);
+            return; // Exit early for webruntime calls
+          }
+
+          // Handle Lightning/Aura calls (original logic)
           // Determine if this is a boxcarred request (more than one action)
           let boxcarId: string | undefined = undefined;
           let actionsArr: unknown[] = [];
@@ -127,24 +225,47 @@ const DevtoolsPanel: React.FC = () => {
             Array.isArray((reqPostData as { actions?: unknown[] }).actions)
           ) {
             actionsArr = (reqPostData as { actions: unknown[] }).actions;
+            console.debug('[Apex Inspector] Found actions array:', actionsArr);
             if (actionsArr.length > 1) {
               // Only assign a boxcarId if more than one action
               boxcarId = generateBoxcarId();
             }
             actionsArr.forEach((action: unknown, idx: number) => {
+              console.debug('[Apex Inspector] Processing action:', action);
               if (
                 typeof action === "object" &&
                 action !== null &&
                 (action as { descriptor?: string }).descriptor === "aura://ApexActionController/ACTION$execute"
               ) {
+                console.debug('[Apex Inspector] Found Apex action!', action);
                 // Robustly extract Apex class and method (Salesforce can use 'classname' or 'className', 'method' or 'methodName')
                 const paramsObj = (action as Record<string, unknown>).params || {};
-                const apexClass = typeof (paramsObj as Record<string, unknown>)["classname"] === 'string'
-                  ? (paramsObj as Record<string, unknown>)["classname"] as string
-                  : (paramsObj as Record<string, unknown>)["className"] as string;
-                const apexMethod = typeof (paramsObj as Record<string, unknown>)["method"] === 'string'
-                  ? (paramsObj as Record<string, unknown>)["method"] as string
-                  : (paramsObj as Record<string, unknown>)["methodName"] as string;
+                console.debug('[Apex Inspector] Params object:', paramsObj);
+                
+                let apexClass: string;
+                let apexMethod: string;
+                
+                // Try to extract class name with fallbacks
+                if (typeof (paramsObj as Record<string, unknown>)["classname"] === 'string') {
+                  apexClass = (paramsObj as Record<string, unknown>)["classname"] as string;
+                } else if (typeof (paramsObj as Record<string, unknown>)["className"] === 'string') {
+                  apexClass = (paramsObj as Record<string, unknown>)["className"] as string;
+                } else {
+                  console.debug('[Apex Inspector] Could not find classname or className in params:', paramsObj);
+                  apexClass = '[Unknown Class]';
+                }
+                
+                // Try to extract method name with fallbacks
+                if (typeof (paramsObj as Record<string, unknown>)["method"] === 'string') {
+                  apexMethod = (paramsObj as Record<string, unknown>)["method"] as string;
+                } else if (typeof (paramsObj as Record<string, unknown>)["methodName"] === 'string') {
+                  apexMethod = (paramsObj as Record<string, unknown>)["methodName"] as string;
+                } else {
+                  console.debug('[Apex Inspector] Could not find method or methodName in params:', paramsObj);
+                  apexMethod = '[Unknown Method]';
+                }
+                
+                console.debug('[Apex Inspector] Extracted class:', apexClass, 'method:', apexMethod);
                 // --- Error detection logic ---
                 let error: string | null = null;
                 const resJsonObj = resJson as Record<string, unknown>;
@@ -279,6 +400,33 @@ const DevtoolsPanel: React.FC = () => {
                 }
               }
             });
+          } else {
+            console.debug('[Apex Inspector] No actions array found in request data. reqPostData:', reqPostData);
+            // Fallback: try to create a generic entry for unrecognized Lightning/Aura calls
+            const fallbackRequest = reqPostData as Record<string, unknown>;
+            setActions((prev) => [
+              ...prev,
+              {
+                id: `fallback-${request.requestId || request.request.url}-${Date.now()}`,
+                timestamp: request.startedDateTime ? new Date(request.startedDateTime).getTime() : Date.now(),
+                apexClass: '[Unknown Format]',
+                method: '[Unknown]',
+                latency: request.time,
+                request: fallbackRequest,
+                response: (resJson as Record<string, unknown>) || {},
+                rawRequest: reqPostData,
+                rawResponse: resJson || {},
+                context: {},
+                network: {
+                  requestId: request.requestId || request.request.url,
+                  url: request.request.url,
+                  latency: request.time,
+                },
+                fullResponse: resJson as Record<string, unknown>,
+                fullRequest: request,
+                error: 'Could not parse request format. See raw data.',
+              },
+            ]);
           }
         } catch (err) {
           // Debug: log parse errors
@@ -288,7 +436,7 @@ const DevtoolsPanel: React.FC = () => {
     }
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, []);
+  }, [apexClassMappings]);
 
   // Sorting and filtering
   const filteredSorted = useMemo(() => {
@@ -556,6 +704,19 @@ const DevtoolsPanel: React.FC = () => {
               <div className="flex items-center gap-2">
                 {selectedRow.error && <span title="Apex Error" className="text-red-600 dark:text-red-400">⛔</span>}
                 <h2 className="text-lg font-semibold">{selectedRow.apexClass}.{selectedRow.method}</h2>
+                {selectedRow.context && typeof selectedRow.context === 'object' && 'needsMapping' in selectedRow.context && Boolean(selectedRow.context.needsMapping) && (
+                  <div className="relative group inline-block align-middle">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="text-orange-500 cursor-help">
+                      <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                      <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/>
+                    </svg>
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                      Community Cloud obfuscated class name<br />
+                      Configure "Apex Class Mappings JSON" in settings to see real names
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
+                    </div>
+                  </div>
+                )}
                 {selectedRow.boxcarId && (
                   <div className="relative group inline-block align-middle">
                     <span className="text-indigo-600 dark:text-indigo-400 cursor-help">
@@ -1023,7 +1184,22 @@ const DevtoolsPanel: React.FC = () => {
                     </div>
                   </td>
                   <td className="border px-2 py-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100 min-w-0">
-                    <div className="truncate" title={row.apexClass}>{row.apexClass}</div>
+                    <div className="flex items-center gap-1">
+                      <div className="truncate" title={row.apexClass}>{row.apexClass}</div>
+                      {row.context && typeof row.context === 'object' && 'needsMapping' in row.context && Boolean(row.context.needsMapping) && (
+                        <div className="relative group inline-block align-middle flex-shrink-0">
+                          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-orange-500 cursor-help">
+                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                            <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/>
+                          </svg>
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 max-w-xs">
+                            Community Cloud obfuscated class name.<br />
+                            Configure "Apex Class Mappings JSON" in settings to see real names.
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="border px-2 py-1 dark:bg-gray-900 dark:border-gray-700 dark:text-gray-100 min-w-0">
                     <div className="truncate" title={row.method}>{row.method}</div>
@@ -1063,6 +1239,39 @@ function isPerfSummary(obj: unknown): obj is {
   actions?: Record<string, { total?: number; db?: number }>;
 } {
   return !!obj && typeof obj === 'object' && 'actions' in obj;
+}
+
+// Helper function to parse apex class mappings from SF CLI JSON output
+function parseApexClassMappings(apexClassMappingsJson: string): Map<string, string> {
+  const mappings = new Map<string, string>();
+  
+  if (!apexClassMappingsJson.trim()) {
+    return mappings;
+  }
+  
+  try {
+    const parsed = JSON.parse(apexClassMappingsJson);
+    const records = parsed?.result?.records;
+    
+    if (Array.isArray(records)) {
+      records.forEach((record: { Id?: string; Name?: string }) => {
+        if (record.Id && record.Name && typeof record.Id === 'string' && typeof record.Name === 'string') {
+          // Store both full ID and potential truncated versions for matching
+          mappings.set(record.Id, record.Name);
+          
+          // Also store truncated version (first 15 chars) since Community Cloud seems to truncate IDs
+          if (record.Id.length > 15) {
+            const truncatedId = record.Id.substring(0, 15);
+            mappings.set(truncatedId, record.Name);
+          }
+        }
+      });
+    }
+  } catch (error) {
+    console.debug('[Apex Inspector] Failed to parse Apex Class mappings JSON:', error);
+  }
+  
+  return mappings;
 }
 
 export default DevtoolsPanel;

@@ -9,7 +9,7 @@ type JsonTheme = typeof jsonThemes[number];
 
 const Options = () => {
   const [settings, saveSettings] = useOptionsSettings();
-  const { theme, jsonViewTheme, minRawDataHeight = 320 } = settings;
+  const { theme, jsonViewTheme, minRawDataHeight = 320, apexClassMappingsJson = '' } = settings;
 
   // Set <html> class for dark mode
   React.useEffect(() => {
@@ -59,6 +59,32 @@ const Options = () => {
                 value={minRawDataHeight}
                 onChange={e => saveSettings({ minRawDataHeight: Number(e.target.value) })}
               />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="font-semibold text-sm mb-1 flex items-center gap-2">
+                Apex Class Mappings JSON:
+                <div className="relative group">
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" className="text-gray-500 cursor-help">
+                    <path d="M8 0C3.6 0 0 3.6 0 8s3.6 8 8 8 8-3.6 8-8-3.6-8-8-8zm1 13H7v-2h2v2zm0-3H7V5h2v5z"/>
+                  </svg>
+                  <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50 w-80">
+                    Paste the JSON output from: sf data query --query "Select Id, Name from ApexClass" --json
+                    <br />This enables showing real class names for Community/LWR webruntime calls.
+                    <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900 dark:border-t-gray-700"></div>
+                  </div>
+                </div>
+              </label>
+              <textarea
+                className="px-3 py-2 rounded-lg text-sm border font-mono dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600 bg-white text-gray-900 border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 w-full resize-y"
+                value={apexClassMappingsJson}
+                onChange={e => saveSettings({ apexClassMappingsJson: e.target.value })}
+                placeholder='{"status":0,"result":{"records":[{"Id":"01pXXXXXXXXXXXX","Name":"MyApexClass"}]}}'
+                rows={4}
+                style={{ minHeight: '100px' }}
+              />
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Run <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">sf data query --query "Select Id, Name from ApexClass" --json</code> and paste the output here.
+              </div>
             </div>
           </div>
         </div>

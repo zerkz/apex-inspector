@@ -27,17 +27,34 @@ chrome.devtools.panels.create(
       }
     }
     chrome.devtools.network.onRequestFinished.addListener((request) => {
-      if (request.request && request.request.url && request.request.url.includes("/aura")) {
-        request.getContent((body) => {
-          const requestWithContent = {
-            ...request,
-            response: {
-              ...request.response,
-              content: { text: body }
-            }
-          };
-          postToPanel({ type: "network", request: requestWithContent });
-        });
+      if (request.request && request.request.url) {
+        // Handle Aura requests
+        if (request.request.url.includes("/aura")) {
+          request.getContent((body) => {
+            const requestWithContent = {
+              ...request,
+              response: {
+                ...request.response,
+                content: { text: body }
+              }
+            };
+            postToPanel({ type: "lightning", request: requestWithContent });
+          });
+        }
+
+        // Handle Salesforce Communities/Experience/Sites Apex requests
+        if (request.request.url.includes("/webruntime/api/apex/execute")) {
+          request.getContent((body) => {
+            const requestWithContent = {
+              ...request,
+              response: {
+                ...request.response,
+                content: { text: body }
+              }
+            };
+            postToPanel({ type: "community", request: requestWithContent });
+          });
+        }
       }
     });
   }

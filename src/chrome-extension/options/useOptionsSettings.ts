@@ -5,6 +5,7 @@ export type OptionsSettings = {
   jsonViewTheme: 'default' | 'a11y' | 'github' | 'vscode' | 'atom' | 'winter-is-coming';
   minRawDataHeight?: number; // px, optional for backward compat
   apexClassMappingsJson?: string; // JSON string from SF CLI SOQL query
+  alwaysExpandedJson?: boolean; // Always expand JSON views (depth limit 50)
 };
 
 const DEFAULTS: OptionsSettings = {
@@ -12,6 +13,7 @@ const DEFAULTS: OptionsSettings = {
   jsonViewTheme: 'default',
   minRawDataHeight: 320, 
   apexClassMappingsJson: '', 
+  alwaysExpandedJson: false,
 };
 
 export function useOptionsSettings() {
@@ -21,12 +23,13 @@ export function useOptionsSettings() {
   useEffect(() => {
     const load = async () => {
       if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.get(['theme', 'jsonViewTheme', 'minRawDataHeight', 'apexClassMappingsJson'], (result) => {
+        chrome.storage.local.get(['theme', 'jsonViewTheme', 'minRawDataHeight', 'apexClassMappingsJson', 'alwaysExpandedJson'], (result) => {
           setSettings({
             theme: result.theme || DEFAULTS.theme,
             jsonViewTheme: result.jsonViewTheme || DEFAULTS.jsonViewTheme,
             minRawDataHeight: typeof result.minRawDataHeight === 'number' ? result.minRawDataHeight : DEFAULTS.minRawDataHeight,
             apexClassMappingsJson: result.apexClassMappingsJson || DEFAULTS.apexClassMappingsJson,
+            alwaysExpandedJson: typeof result.alwaysExpandedJson === 'boolean' ? result.alwaysExpandedJson : DEFAULTS.alwaysExpandedJson,
           });
         });
       } else {
@@ -36,6 +39,7 @@ export function useOptionsSettings() {
           jsonViewTheme: (localStorage.getItem('jsonViewTheme') as OptionsSettings['jsonViewTheme']) || DEFAULTS.jsonViewTheme,
           minRawDataHeight: Number(localStorage.getItem('minRawDataHeight')) || DEFAULTS.minRawDataHeight,
           apexClassMappingsJson: localStorage.getItem('apexClassMappingsJson') || DEFAULTS.apexClassMappingsJson,
+          alwaysExpandedJson: localStorage.getItem('alwaysExpandedJson') === 'true' || DEFAULTS.alwaysExpandedJson,
         });
       }
     };
@@ -56,6 +60,9 @@ export function useOptionsSettings() {
       }
       if (updated.apexClassMappingsJson !== undefined) {
         localStorage.setItem('apexClassMappingsJson', updated.apexClassMappingsJson);
+      }
+      if (updated.alwaysExpandedJson !== undefined) {
+        localStorage.setItem('alwaysExpandedJson', String(updated.alwaysExpandedJson));
       }
     }
   };

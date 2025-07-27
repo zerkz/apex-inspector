@@ -1,6 +1,6 @@
 # Apex Inspector Chrome DevTools Extension ![apex inspector logo](icon48.png)
 
-Apex Inspector is a Chrome DevTools extension for Salesforce developers that provides deep visibility into Apex HTTP calls made via the `/aura` endpoint, specifically those using `aura.ApexAction.execute` (aka `@AuraEnabled` apex methods). It is designed to help you debug, inspect, and analyze Apex network activity directly from your browser's DevTools. This can be very helpful if you are developing LWCs (Lightning Web Components).
+Apex Inspector is a Chrome DevTools extension for Salesforce developers that provides deep visibility into Apex HTTP calls across multiple Salesforce platforms. It supports calls made via the `/aura` endpoint (Lightning/Aura), `/webruntime/api/apex/execute` (Experience Cloud/Communities), and `/apexremote` (VisualForce Remoting). It is designed to help you debug, inspect, and analyze Apex network activity directly from your browser's DevTools.
 
 [Chrome Extension Store Link / Install](https://chromewebstore.google.com/detail/apex-inspector/nibklfbhlmfngbjjpnbhbdjfllddppdm?hl=en)
 
@@ -9,7 +9,10 @@ Apex Inspector is a Chrome DevTools extension for Salesforce developers that pro
 ## Features
 
 - **Automatic Capture of Apex Calls:**
-  - Monitors all network requests to `/aura` and filters for those containing `aura.ApexAction.execute`.
+  - Monitors network requests across multiple Salesforce platforms:
+    - `/aura` endpoint for Lightning/Aura calls containing `aura.ApexAction.execute`
+    - `/webruntime/api/apex/execute` for Experience Cloud/Communities calls
+    - `/apexremote` for VisualForce Remoting calls
   - Supports both single and boxcarred (batched) Apex actions.
   - Calls can be sorted, or filtered via the request body or response body contents.
 
@@ -41,7 +44,7 @@ Apex Inspector is a Chrome DevTools extension for Salesforce developers that pro
 
 2. **Trigger Apex Calls:**
    - Open DevTools and select the "Apex Inspector" panel.
-   - Use your Salesforce Lightning app as normal. Apex Inspector will automatically capture and display relevant network activity.
+   - Use your Salesforce app as normal (Lightning, Experience Cloud, or VisualForce pages). Apex Inspector will automatically capture and display relevant network activity.
 
 3. **Inspect and Debug:**
    - Click rows to expand details, view parameters, responses, and raw requests.
@@ -59,7 +62,7 @@ Apex Inspector is a Chrome DevTools extension for Salesforce developers that pro
 **Note:** Arrow key navigation automatically opens the detail view for the selected row.
 
 ## Who is this for?
-- Salesforce developers and admins working with Lightning components and Apex controllers.
+- Salesforce developers and admins working with Lightning components, Experience Cloud sites, VisualForce pages, and Apex controllers.
 - Anyone needing to debug or analyze Salesforce network traffic in detail.
 
 ## Why does this require "Read and change all your data on all websites"? 

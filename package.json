@@ -1,7 +1,7 @@
 {
   "name": "Apex-Inspector",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "author": {
     "name": "Zack Whipkey",
@@ -17,7 +17,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "watch-build": "chokidar 'src/**/*' '*.html' 'manifest.json' -c 'npm run build'"
+    "watch-build": "chokidar \"src/**/*\" \"*.html\" \"manifest.json\" -c \"npm run build\""
   },
   "dependencies": {
     "@types/node": "^22.5.5",

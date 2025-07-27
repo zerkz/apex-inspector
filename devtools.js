@@ -55,6 +55,20 @@ chrome.devtools.panels.create(
             postToPanel({ type: "community", request: requestWithContent });
           });
         }
+
+        // Handle VisualForce Remoting requests
+        if (request.request.url.includes("/apexremote")) {
+          request.getContent((body) => {
+            const requestWithContent = {
+              ...request,
+              response: {
+                ...request.response,
+                content: { text: body }
+              }
+            };
+            postToPanel({ type: "vfremoting", request: requestWithContent });
+          });
+        }
       }
     });
   }

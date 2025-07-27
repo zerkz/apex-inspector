@@ -45,7 +45,7 @@ const columns: { key: SortableKeys; label: string }[] = [
 
 const DevtoolsPanel: React.FC = () => {
   const [settings, saveSettings] = useOptionsSettings();
-  const { theme, jsonViewTheme, minRawDataHeight = 320, apexClassMappingsJson = '' } = settings;
+  const { theme, jsonViewTheme, minRawDataHeight = 320, apexClassMappingsJson = '', alwaysExpandedJson = false } = settings;
   const [actions, setActions] = useState<ApexAction[]>([]);
   // Use expandedId as the only source of truth for expanded row
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -56,6 +56,8 @@ const DevtoolsPanel: React.FC = () => {
   const [bodySearch, setBodySearch] = useState("");
 
   const jsonViewDark = theme === 'dark';
+  // Calculate collapsed value: if alwaysExpandedJson is true, show everything (50 levels), otherwise default to 2
+  const jsonViewCollapsed = alwaysExpandedJson ? 50 : 2;
 
   // Parse apex class mappings from settings
   const apexClassMappings = useMemo(() => {
@@ -74,7 +76,7 @@ const DevtoolsPanel: React.FC = () => {
     function handleMessage(event: MessageEvent) {
       // Debug: log all incoming messages
       console.debug('[Apex Inspector] Panel received message:', event.data);
-      if (event.data && (event.data.type === "network" || event.data.type === "lightning" || event.data.type === "community") && event.data.request) {
+      if (event.data && (event.data.type === "network" || event.data.type === "lightning" || event.data.type === "community" || event.data.type === "vfremoting") && event.data.request) {
         try {
           const request = event.data.request;
           console.debug('[Apex Inspector] Panel processing network event:', request);
@@ -212,6 +214,90 @@ const DevtoolsPanel: React.FC = () => {
               },
             ]);
             return; // Exit early for webruntime calls
+          }
+
+          // Check if this is a VisualForce Remoting call (different structure)
+          const isVfRemotingCall = request.request.url.includes('/apexremote');
+          
+          if (isVfRemotingCall) {
+            // Handle VisualForce Remoting calls
+            console.debug('[Apex Inspector] Processing VisualForce Remoting call');
+            
+            // VisualForce Remoting request structure:
+            // {
+            //   "action": "TestApexController",           // Apex class name
+            //   "method": "simpleRemoteMethod",          // Method name
+            //   "data": ["Hello World"],                 // Method parameters (array)
+            //   "type": "rpc",                          // Always "rpc" for remoting
+            //   "tid": 3,                               // Transaction ID
+            //   "ctx": { ... }                          // Context (ignored per requirements)
+            // }
+            const vfReq = reqPostData as {
+              action?: string;
+              method?: string;
+              data?: unknown;
+              type?: string;
+              tid?: number;
+              ctx?: Record<string, unknown>; // We ignore this as per instructions
+            };
+            
+            const apexClass = vfReq.action || '[Unknown Class]';
+            const apexMethod = vfReq.method || '[Unknown Method]';
+            const requestData = vfReq.data || {};
+            
+            console.debug('[Apex Inspector] VF Remoting parsed - Class:', apexClass, 'Method:', apexMethod, 'Data:', requestData);
+            
+            // Handle VF remoting response - the response structure can vary
+            let responseObj: Record<string, unknown> = {};
+            let error: string | null = null;
+            
+            if (resJson && typeof resJson === 'object') {
+              const vfResponse = resJson as Record<string, unknown>;
+              
+              // Check if response has an 'error' field indicating an error occurred
+              if (vfResponse.error) {
+                error = 'VisualForce Remoting error occurred';
+                if (typeof vfResponse.error === 'string') {
+                  error = vfResponse.error;
+                } else if (typeof vfResponse.error === 'object' && vfResponse.error !== null) {
+                  const errorObj = vfResponse.error as Record<string, unknown>;
+                  if (errorObj.message && typeof errorObj.message === 'string') {
+                    error = errorObj.message;
+                  }
+                }
+                responseObj = vfResponse;
+              } else {
+                // For successful VF remoting calls, the response often contains a 'result' field
+                // or the data might be directly in the response - we'll store the whole response
+                responseObj = vfResponse;
+              }
+            }
+            
+            setActions((prev) => [
+              ...prev,
+              {
+                id: `vfremoting-${request.requestId || request.request.url}-${Date.now()}`,
+                timestamp: request.startedDateTime ? new Date(request.startedDateTime).getTime() : Date.now(),
+                apexClass: apexClass,
+                method: apexMethod,
+                latency: request.time,
+                request: requestData as Record<string, unknown>,
+                response: responseObj,
+                rawRequest: reqPostData,
+                rawResponse: resJson || {},
+                context: {}, // We don't include ctx as per instructions
+                network: {
+                  requestId: request.requestId || request.request.url,
+                  url: request.request.url,
+                  latency: request.time,
+                },
+                fullResponse: resJson as Record<string, unknown>,
+                fullRequest: request,
+                error,
+                // No boxcarId for VF remoting calls as they are typically single actions
+              },
+            ]);
+            return; // Exit early for VF remoting calls
           }
 
           // Handle Lightning/Aura calls (original logic)
@@ -614,9 +700,9 @@ const DevtoolsPanel: React.FC = () => {
             >
               {theme === 'dark' ? '🌙 Dark' : '☀️ Light'}
             </button>
-            {/* JSON View Theme Dropdown */}
-            <div className="flex items-center gap-1 min-w-0">
-              <label className="text-xs text-gray-500 dark:text-gray-300 flex-shrink-0" htmlFor="json-theme-select">JSON Theme:</label>
+            {/* JSON View Controls Group */}
+            <div className="flex items-center gap-2 px-2 py-1 rounded border bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700">
+              <label className="text-xs text-gray-500 dark:text-gray-300 flex-shrink-0 font-medium">JSON View:</label>
               <select
                 id="json-theme-select"
                 className="px-2 py-1 rounded text-xs border dark:bg-gray-800 dark:text-gray-100 dark:border-gray-600 bg-gray-100 text-gray-900 border-gray-300 min-w-0"
@@ -628,6 +714,13 @@ const DevtoolsPanel: React.FC = () => {
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
+              <button
+                className={`px-2 py-1 rounded text-xs border transition-colors duration-200 flex-shrink-0 ${alwaysExpandedJson ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700' : (theme === 'dark' ? 'bg-gray-700 text-white border-gray-600 hover:bg-gray-600' : 'bg-white text-gray-900 border-gray-300 hover:bg-gray-100')}`}
+                onClick={() => saveSettings({ alwaysExpandedJson: !alwaysExpandedJson })}
+                title={`${alwaysExpandedJson ? 'Disable' : 'Enable'} always expanded JSON mode (depth limit 50)`}
+              >
+                {alwaysExpandedJson ? '📄 Expanded' : '📋 Collapsed'}
+              </button>
             </div>
           </div>
         </div>
@@ -759,7 +852,7 @@ const DevtoolsPanel: React.FC = () => {
                 <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg text-sm overflow-x-auto border dark:border-gray-700" style={{ minHeight: minRawDataHeight }}>
                   <React18JsonView 
                     src={{ rawRequest: selectedRow.rawRequest, rawResponse: selectedRow.rawResponse, fullRequest: selectedRow.fullRequest, fullResponse: selectedRow.fullResponse }} 
-                    collapsed={2} 
+                    collapsed={jsonViewCollapsed} 
                     enableClipboard={false} 
                     dark={jsonViewDark} 
                     theme={jsonViewTheme} 
@@ -789,7 +882,7 @@ const DevtoolsPanel: React.FC = () => {
                       )}
                     </div>
                     <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg text-sm overflow-x-auto border dark:border-gray-700" style={{ minHeight: 300 }}>
-                      <React18JsonView src={selectedRow.request} collapsed={2} enableClipboard={false} dark={jsonViewDark} theme={jsonViewTheme} />
+                      <React18JsonView src={selectedRow.request} collapsed={jsonViewCollapsed} enableClipboard={false} dark={jsonViewDark} theme={jsonViewTheme} />
                     </div>
                   </div>
 
@@ -812,7 +905,7 @@ const DevtoolsPanel: React.FC = () => {
                       )}
                     </div>
                     <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg text-sm overflow-x-auto border dark:border-gray-700" style={{ minHeight: 300 }}>
-                      <React18JsonView src={selectedRow.response} collapsed={2} enableClipboard={false} dark={jsonViewDark} theme={jsonViewTheme} />
+                      <React18JsonView src={selectedRow.response} collapsed={jsonViewCollapsed} enableClipboard={false} dark={jsonViewDark} theme={jsonViewTheme} />
                     </div>
                   </div>
                 </div>
@@ -1097,11 +1190,11 @@ const DevtoolsPanel: React.FC = () => {
                   <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-lg text-xs overflow-x-auto border dark:border-gray-700" style={{ minHeight: minRawDataHeight }}>
                     <div className="mb-4">
                       <h4 className="font-semibold mb-2">Full HTTP Request:</h4>
-                      <React18JsonView src={selectedRow.fullRequest} collapsed={2} enableClipboard={false} dark={jsonViewDark} theme={jsonViewTheme} />
+                      <React18JsonView src={selectedRow.fullRequest} collapsed={jsonViewCollapsed} enableClipboard={false} dark={jsonViewDark} theme={jsonViewTheme} />
                     </div>
                     <div>
                       <h4 className="font-semibold mb-2">Full HTTP Response:</h4>
-                      <React18JsonView src={selectedRow.fullResponse} collapsed={2} enableClipboard={false} dark={jsonViewDark} theme={jsonViewTheme} />
+                      <React18JsonView src={selectedRow.fullResponse} collapsed={jsonViewCollapsed} enableClipboard={false} dark={jsonViewDark} theme={jsonViewTheme} />
                     </div>
                   </div>
                 </details>

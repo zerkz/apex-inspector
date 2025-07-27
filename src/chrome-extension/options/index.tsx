@@ -9,7 +9,7 @@ type JsonTheme = typeof jsonThemes[number];
 
 const Options = () => {
   const [settings, saveSettings] = useOptionsSettings();
-  const { theme, jsonViewTheme, minRawDataHeight = 320, apexClassMappingsJson = '' } = settings;
+  const { theme, jsonViewTheme, minRawDataHeight = 320, apexClassMappingsJson = '', alwaysExpandedJson = false } = settings;
 
   // Set <html> class for dark mode
   React.useEffect(() => {
@@ -47,6 +47,16 @@ const Options = () => {
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="font-semibold text-sm mb-1">JSON View Expansion:</label>
+              <button
+                className={`px-3 py-2 rounded-lg text-sm border font-medium transition-colors duration-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 ${alwaysExpandedJson ? 'bg-blue-600 text-white border-blue-600 hover:bg-blue-700' : (theme === 'dark' ? 'bg-gray-800 text-white border-gray-600 hover:bg-gray-700' : 'bg-white text-gray-900 border-gray-300 hover:bg-gray-100')}`}
+                onClick={() => saveSettings({ alwaysExpandedJson: !alwaysExpandedJson })}
+                title={`${alwaysExpandedJson ? 'Disable' : 'Enable'} always expanded JSON mode (depth limit 50)`}
+              >
+                {alwaysExpandedJson ? '📄 Always Expanded' : '📋 Collapsed'}
+              </button>
             </div>
             <div className="flex flex-col gap-2">
               <label className="font-semibold text-sm mb-1">Min Height for Raw Data (px):</label>

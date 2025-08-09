@@ -1,6 +1,6 @@
 # Apex Inspector Chrome DevTools Extension ![apex inspector logo](icon48.png)
 
-Apex Inspector is a Chrome DevTools extension for Salesforce developers that provides deep visibility into Apex HTTP calls across multiple Salesforce platforms. It supports calls made via the `/aura` endpoint (Lightning/Aura), `/webruntime/api/apex/execute` (Experience Cloud/Communities), and `/apexremote` (VisualForce Remoting). It is designed to help you debug, inspect, and analyze Apex network activity directly from your browser's DevTools.
+Apex Inspector is a Chrome DevTools extension for Salesforce developers that provides deep visibility into Apex HTTP calls and Salesforce API activity across multiple platforms. It supports calls made via the `/aura` endpoint (Lightning/Aura), `/webruntime/api/apex/execute` (Experience Cloud/Communities), `/apexremote` (VisualForce Remoting), GraphQL API calls, and Lightning Data Service operations. It is designed to help you debug, inspect, and analyze Salesforce network activity directly from your browser's DevTools.
 
 [Chrome Extension Store Link / Install](https://chromewebstore.google.com/detail/apex-inspector/nibklfbhlmfngbjjpnbhbdjfllddppdm?hl=en)
 
@@ -12,7 +12,9 @@ Apex Inspector is a Chrome DevTools extension for Salesforce developers that pro
   - Monitors network requests across multiple Salesforce platforms:
     - `/aura` endpoint for Lightning/Aura calls containing `aura.ApexAction.execute`
     - `/webruntime/api/apex/execute` for Experience Cloud/Communities calls
-    - `/apexremote` for VisualForce Remoting calls
+    - `/apexremote` for VisualForce Remoting calls (including bulkified/boxcarred batches)
+    - GraphQL API calls (`/services/data/*/graphql`)
+    - Lightning Data Service calls (`uiRecordApi` @wire methods like `getRecord`, `updateRecord`, `createRecord`)
   - Supports both single and boxcarred (batched) Apex actions.
   - Calls can be sorted, or filtered via the request body or response body contents.
 
@@ -50,6 +52,10 @@ Apex Inspector is a Chrome DevTools extension for Salesforce developers that pro
    - Click rows to expand details, view parameters, responses, and raw requests.
    - Use the debug log for troubleshooting extension behavior.
 
+## Apex Class Mapping
+For some APIs, you might see an Apex Class ID as the name. This means that the API is calling the Apex endpoint via ID. Visit the options page to learn how to provide ID -> Name mappings for the tool!
+
+
 ## Keybindings/Shortcuts
 
 | Key | Action | Context |
@@ -62,8 +68,8 @@ Apex Inspector is a Chrome DevTools extension for Salesforce developers that pro
 **Note:** Arrow key navigation automatically opens the detail view for the selected row.
 
 ## Who is this for?
-- Salesforce developers and admins working with Lightning components, Experience Cloud sites, VisualForce pages, and Apex controllers.
-- Anyone needing to debug or analyze Salesforce network traffic in detail.
+- Salesforce developers and admins working with Lightning components, Experience Cloud sites, VisualForce pages, Apex controllers, and Lightning Data Service operations.
+- Anyone needing to debug or analyze Salesforce network traffic, API calls, and data operations in detail.
 
 ## Why does this require "Read and change all your data on all websites"? 
 Unfortunately since this is a devtools extension, there's no way around it. Other similar tools, like the [React Devtools Extension](https://chromewebstore.google.com/detail/react-developer-tools/fmkadmapgofadopljbjfkapdkoienihi?hl=en) require the same permission. 

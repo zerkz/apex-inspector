@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Apex Inspector",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "author": "ZDWare (Zack Whipkey, @zerkz on Github)",
-  "description": "Extension for Chrome Devtools specifically for `@AuraEnabled' (/aura) Apex traffic on the Salesforce Platform.",
+  "description": "Extension for Chrome Devtools specifically for debugging Apex/API network traffic on the Salesforce Platform.",
   "icons": {
     "16": "images/icon16.png",
     "32": "images/icon32.png",

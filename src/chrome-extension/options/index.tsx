@@ -7,9 +7,45 @@ const jsonThemes = [
 ] as const;
 type JsonTheme = typeof jsonThemes[number];
 
+// Helper function to generate OS-specific commands
+const generateOSCommands = () => {
+  const baseQuery = 'sf data query --query "Select Id, Name from ApexClass" --json';
+  
+  return {
+    windows: `${baseQuery} | clip`,
+    macos: `${baseQuery} | pbcopy`,
+    linux: `${baseQuery} | xclip -selection clipboard`
+  };
+};
+
+// Helper function to copy text to clipboard
+const copyToClipboard = async (text: string): Promise<boolean> => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } else {
+      // Fallback for older browsers
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'absolute';
+      textarea.style.left = '-9999px';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const success = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return success;
+    }
+  } catch {
+    return false;
+  }
+};
+
 const Options = () => {
   const [settings, saveSettings] = useOptionsSettings();
   const { theme, jsonViewTheme, minRawDataHeight = 320, apexClassMappingsJson = '', alwaysExpandedJson = false } = settings;
+  const [copiedCommand, setCopiedCommand] = React.useState<string | null>(null);
 
   // Set <html> class for dark mode
   React.useEffect(() => {
@@ -130,6 +166,51 @@ const Options = () => {
               />
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 Run <code className="bg-gray-200 dark:bg-gray-700 px-1 rounded">sf data query --query "Select Id, Name from ApexClass" --json</code> and paste the output here.
+              </div>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <span className="text-xs text-gray-500 dark:text-gray-400 self-center">Copy command for:</span>
+                <button
+                  className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  onClick={async () => {
+                    const commands = generateOSCommands();
+                    const success = await copyToClipboard(commands.windows);
+                    if (success) {
+                      setCopiedCommand('windows');
+                      setTimeout(() => setCopiedCommand(null), 2000);
+                    }
+                  }}
+                  title="Copy Windows command (uses clip)"
+                >
+                  {copiedCommand === 'windows' ? '✓ Copied!' : '🪟 Windows'}
+                </button>
+                <button
+                  className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  onClick={async () => {
+                    const commands = generateOSCommands();
+                    const success = await copyToClipboard(commands.macos);
+                    if (success) {
+                      setCopiedCommand('macos');
+                      setTimeout(() => setCopiedCommand(null), 2000);
+                    }
+                  }}
+                  title="Copy macOS command (uses pbcopy)"
+                >
+                  {copiedCommand === 'macos' ? '✓ Copied!' : '🍎 macOS'}
+                </button>
+                <button
+                  className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white text-xs rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  onClick={async () => {
+                    const commands = generateOSCommands();
+                    const success = await copyToClipboard(commands.linux);
+                    if (success) {
+                      setCopiedCommand('linux');
+                      setTimeout(() => setCopiedCommand(null), 2000);
+                    }
+                  }}
+                  title="Copy Linux command (uses xclip)"
+                >
+                  {copiedCommand === 'linux' ? '✓ Copied!' : '🐧 Linux'}
+                </button>
               </div>
             </div>
           </div>

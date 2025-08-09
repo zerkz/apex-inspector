@@ -153,7 +153,17 @@ const DevtoolsPanel: React.FC = () => {
 
   // Parse apex class mappings from settings
   const apexClassMappings = useMemo(() => {
-    return parseApexClassMappings(apexClassMappingsJson);
+    const mappings = parseApexClassMappings(apexClassMappingsJson);
+    
+    // Log the parsed mappings if JSON was provided
+    if (apexClassMappingsJson.trim() && mappings.size > 0) {
+      console.log('[Apex Inspector] 📋 Parsed Apex Class ID to Name mappings:');
+      console.table(Array.from(mappings.entries()).map(([id, name]) => ({ ID: id, Name: name, 'ID Length': id.length })));
+    } else if (apexClassMappingsJson.trim() && mappings.size === 0) {
+      console.warn('[Apex Inspector] ⚠️ Apex Class mappings JSON was provided but no mappings were created');
+    }
+    
+    return mappings;
   }, [apexClassMappingsJson]);
 
   // Ensure <html> class is set for dark mode
@@ -244,19 +254,34 @@ const DevtoolsPanel: React.FC = () => {
               // Extract the ID part (after the /)
               const idPart = originalApexClass.split('/')[1];
               
-              // Try to resolve using the mappings
-              if (idPart && apexClassMappings.has(idPart)) {
-                actualClassName = apexClassMappings.get(idPart)!;
-                console.debug(`[Apex Inspector] Resolved obfuscated class ${originalApexClass} to ${actualClassName}`);
-              } else {
-                // Show the ID part but indicate it's obfuscated
-                actualClassName = idPart || originalApexClass;
-                helpTextInfo = {
-                  originalClassName: originalApexClass,
-                  note: 'Class name is obfuscated in Community Cloud. Configure Apex Class Mappings in settings to see real names.',
-                  needsMapping: true
-                };
-                console.debug(`[Apex Inspector] Could not resolve obfuscated class ${originalApexClass}, no mapping found for ID ${idPart}`);
+              if (idPart) {
+                console.debug(`[Apex Inspector] Attempting to resolve obfuscated ID: "${idPart}" (length: ${idPart.length})`);
+                console.debug(`[Apex Inspector] Available mappings:`, Array.from(apexClassMappings.keys()));
+                
+                // Try to resolve using the mappings with ID conversion
+                const resolvedName = resolveApexClassName(idPart, apexClassMappings);
+                
+                if (resolvedName !== idPart) {
+                  // Successfully resolved
+                  actualClassName = resolvedName;
+                  console.debug(`[Apex Inspector] ✅ Resolved obfuscated class ${originalApexClass} to ${actualClassName}`);
+                } else {
+                  // Show the ID part but indicate it's obfuscated
+                  actualClassName = idPart;
+                  helpTextInfo = {
+                    originalClassName: originalApexClass,
+                    note: 'Class name is obfuscated in Community Cloud. Configure Apex Class Mappings in settings to see real names.',
+                    needsMapping: true
+                  };
+                  console.debug(`[Apex Inspector] ❌ Could not resolve obfuscated class ${originalApexClass}, no mapping found for ID ${idPart}`);
+                  
+                  // Try manual conversion to debug
+                  if (idPart.length === 15) {
+                    const converted18 = convertTo18CharId(idPart);
+                    console.debug(`[Apex Inspector] 🔍 Converted 15-char "${idPart}" to 18-char "${converted18}"`);
+                    console.debug(`[Apex Inspector] 🔍 18-char mapping exists:`, apexClassMappings.has(converted18));
+                  }
+                }
               }
             }
             
@@ -1886,34 +1911,200 @@ function isPerfSummary(obj: unknown): obj is {
   return !!obj && typeof obj === 'object' && 'actions' in obj;
 }
 
+// Convert a 15-character Salesforce ID to an 18-character ID
+function convertTo18CharId(id15: string): string {
+  if (!id15 || id15.length !== 15) {
+    return id15; // Return as-is if not a valid 15-char ID
+  }
+
+  const suffix = [];
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ012345';
+
+  // Process in chunks of 5 characters
+  for (let i = 0; i < 3; i++) {
+    let flags = 0;
+    for (let j = 0; j < 5; j++) {
+      const char = id15.charAt(i * 5 + j);
+      // Check if character is uppercase letter
+      if (char >= 'A' && char <= 'Z') {
+        flags += 1 << j;
+      }
+    }
+    suffix.push(chars.charAt(flags));
+  }
+
+  return id15 + suffix.join('');
+}
+
+// Resolve apex class name using mappings with ID conversion
+function resolveApexClassName(classId: string, mappings: Map<string, string>): string {
+  console.debug(`[Apex Inspector] 🔍 Resolving classId: "${classId}" (length: ${classId.length})`);
+  
+  // First try direct lookup
+  if (mappings.has(classId)) {
+    console.debug(`[Apex Inspector] ✅ Direct lookup found: ${mappings.get(classId)}`);
+    return mappings.get(classId)!;
+  }
+  console.debug(`[Apex Inspector] ❌ Direct lookup failed for: "${classId}"`);
+  
+  // If it's 15 characters, try converting to 18 and lookup
+  if (classId.length === 15) {
+    const converted18 = convertTo18CharId(classId);
+    console.debug(`[Apex Inspector] 🔄 Converted 15-char "${classId}" to 18-char "${converted18}"`);
+    if (mappings.has(converted18)) {
+      console.debug(`[Apex Inspector] ✅ 18-char lookup found: ${mappings.get(converted18)}`);
+      return mappings.get(converted18)!;
+    }
+    console.debug(`[Apex Inspector] ❌ 18-char lookup failed for: "${converted18}"`);
+  }
+  
+  // If it's 18 characters, try truncating to 15 and lookup
+  if (classId.length === 18) {
+    const truncated15 = classId.substring(0, 15);
+    console.debug(`[Apex Inspector] ✂️ Truncated 18-char "${classId}" to 15-char "${truncated15}"`);
+    if (mappings.has(truncated15)) {
+      console.debug(`[Apex Inspector] ✅ 15-char lookup found: ${mappings.get(truncated15)}`);
+      return mappings.get(truncated15)!;
+    }
+    console.debug(`[Apex Inspector] ❌ 15-char lookup failed for: "${truncated15}"`);
+  }
+  
+  console.debug(`[Apex Inspector] ❌ No mapping found, returning original ID: "${classId}"`);
+  // No mapping found, return original ID
+  return classId;
+}
+
 // Helper function to parse apex class mappings from SF CLI JSON output
 function parseApexClassMappings(apexClassMappingsJson: string): Map<string, string> {
   const mappings = new Map<string, string>();
   
   if (!apexClassMappingsJson.trim()) {
+    console.debug('[Apex Inspector] No apex class mappings JSON provided');
     return mappings;
   }
   
   try {
+    // Add detailed JSON validation
+    console.debug('[Apex Inspector] 🔍 Attempting to parse JSON, length:', apexClassMappingsJson.length);
+    
+    // Check for common JSON issues
+    const trimmedJson = apexClassMappingsJson.trim();
+    if (!trimmedJson.startsWith('{') && !trimmedJson.startsWith('[')) {
+      console.error('[Apex Inspector] ❌ JSON does not start with { or [');
+      return mappings;
+    }
+    if (!trimmedJson.endsWith('}') && !trimmedJson.endsWith(']')) {
+      console.error('[Apex Inspector] ❌ JSON does not end with } or ]');
+      return mappings;
+    }
+    
+    // Look for potential issues around the error position
+    const errorPos = 7485;
+    if (apexClassMappingsJson.length > errorPos) {
+      const contextStart = Math.max(0, errorPos - 50);
+      const contextEnd = Math.min(apexClassMappingsJson.length, errorPos + 50);
+      const context = apexClassMappingsJson.substring(contextStart, contextEnd);
+      console.debug('[Apex Inspector] 🔍 JSON context around error position:', context);
+    }
+    
     const parsed = JSON.parse(apexClassMappingsJson);
+    console.debug('[Apex Inspector] ✅ JSON parsed successfully');
+    
     const records = parsed?.result?.records;
     
     if (Array.isArray(records)) {
-      records.forEach((record: { Id?: string; Name?: string }) => {
+      console.debug(`[Apex Inspector] Processing ${records.length} apex class records`);
+      let processedCount = 0;
+      let skippedCount = 0;
+      
+      records.forEach((record: { Id?: string; Name?: string }, index: number) => {
+        console.debug(`[Apex Inspector] Processing record ${index + 1}:`, record);
+        
+        // Check if record has both Id and Name, and they are strings
         if (record.Id && record.Name && typeof record.Id === 'string' && typeof record.Name === 'string') {
-          // Store both full ID and potential truncated versions for matching
+          console.debug(`[Apex Inspector] ✅ Valid record: ${record.Id} (${record.Id.length} chars) -> ${record.Name}`);
+          
+          // Store the original ID (whether 15 or 18 characters)
           mappings.set(record.Id, record.Name);
           
-          // Also store truncated version (first 15 chars) since Community Cloud seems to truncate IDs
-          if (record.Id.length > 15) {
-            const truncatedId = record.Id.substring(0, 15);
-            mappings.set(truncatedId, record.Name);
+          if (record.Id.length === 18) {
+            // If we have an 18-char ID, also store the 15-char version
+            const truncated15 = record.Id.substring(0, 15);
+            console.debug(`[Apex Inspector] Adding 15-char mapping: ${truncated15} -> ${record.Name}`);
+            mappings.set(truncated15, record.Name);
+          } else if (record.Id.length === 15) {
+            // If we have a 15-char ID, also store the 18-char version
+            const converted18 = convertTo18CharId(record.Id);
+            console.debug(`[Apex Inspector] Adding 18-char mapping: ${converted18} -> ${record.Name}`);
+            mappings.set(converted18, record.Name);
           }
+          processedCount++;
+        } else {
+          // Log details about why record was skipped
+          if (!record.Id) {
+            console.warn(`[Apex Inspector] ⚠️ Skipping record ${index + 1}: Missing Id field`);
+          } else if (!record.Name) {
+            console.warn(`[Apex Inspector] ⚠️ Skipping record ${index + 1}: Missing Name field (Id: ${record.Id})`);
+          } else if (typeof record.Id !== 'string') {
+            console.warn(`[Apex Inspector] ⚠️ Skipping record ${index + 1}: Id is not a string (type: ${typeof record.Id})`);
+          } else if (typeof record.Name !== 'string') {
+            console.warn(`[Apex Inspector] ⚠️ Skipping record ${index + 1}: Name is not a string (type: ${typeof record.Name})`);
+          }
+          skippedCount++;
         }
       });
+      
+      console.debug(`[Apex Inspector] Parsing complete: ${processedCount} processed, ${skippedCount} skipped`);
+      console.debug(`[Apex Inspector] Created ${mappings.size} total mappings:`, Array.from(mappings.entries()));
+    } else {
+      console.debug('[Apex Inspector] No records array found in parsed JSON, structure:', parsed);
     }
   } catch (error) {
-    console.debug('[Apex Inspector] Failed to parse Apex Class mappings JSON:', error);
+    console.error('[Apex Inspector] ❌ Failed to parse Apex Class mappings JSON:', error);
+    
+    // Provide more specific error information
+    if (error instanceof SyntaxError) {
+      console.error('[Apex Inspector] 🔍 JSON Syntax Error Details:');
+      console.error('  - Message:', error.message);
+      
+      // Try to extract line/column info from error message
+      const lineColMatch = error.message.match(/line (\d+) column (\d+)/);
+      if (lineColMatch) {
+        const line = parseInt(lineColMatch[1]);
+        const col = parseInt(lineColMatch[2]);
+        console.error(`  - Location: Line ${line}, Column ${col}`);
+        
+        // Show the problematic line if we can find it
+        const lines = apexClassMappingsJson.split('\n');
+        if (line > 0 && line <= lines.length) {
+          console.error(`  - Problematic line: "${lines[line - 1]}"`);
+          console.error(`  - Error position: ${' '.repeat(col - 1)}^`);
+        }
+      }
+      
+      // Extract position from error message
+      const posMatch = error.message.match(/position (\d+)/);
+      if (posMatch) {
+        const pos = parseInt(posMatch[1]);
+        console.error(`  - Character position: ${pos}`);
+        
+        // Show context around the error
+        const contextStart = Math.max(0, pos - 30);
+        const contextEnd = Math.min(apexClassMappingsJson.length, pos + 30);
+        const beforeError = apexClassMappingsJson.substring(contextStart, pos);
+        const errorChar = apexClassMappingsJson.charAt(pos);
+        const afterError = apexClassMappingsJson.substring(pos + 1, contextEnd);
+        
+        console.error(`  - Context: "${beforeError}[${errorChar}]${afterError}"`);
+        console.error(`  - Error character: "${errorChar}" (ASCII: ${errorChar.charCodeAt(0)})`);
+      }
+    }
+    
+    console.error('[Apex Inspector] 💡 Suggestions:');
+    console.error('  - Check for trailing commas in objects/arrays');
+    console.error('  - Ensure all property names are in double quotes');
+    console.error('  - Verify all strings are properly escaped');
+    console.error('  - Check for missing commas between array elements');
   }
   
   return mappings;

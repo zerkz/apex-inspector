@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { StorageSync } from '../storageSync';
 
 export type OptionsSettings = {
   theme: 'light' | 'dark';
@@ -6,6 +7,10 @@ export type OptionsSettings = {
   minRawDataHeight?: number; // px, optional for backward compat
   apexClassMappingsJson?: string; // JSON string from SF CLI SOQL query
   alwaysExpandedJson?: boolean; // Always expand JSON views (depth limit 50)
+  // Future boxcar color options (not yet implemented):
+  // allowBrightColors?: boolean; // Allow bright/vibrant colors for boxcar icons
+  // maxLightness?: number; // Maximum lightness percentage (default: 65)
+  // minLightness?: number; // Minimum lightness percentage (default: 45)
 };
 
 const DEFAULTS: OptionsSettings = {
@@ -19,51 +24,48 @@ const DEFAULTS: OptionsSettings = {
 export function useOptionsSettings() {
   const [settings, setSettings] = useState<OptionsSettings>(DEFAULTS);
 
-  // Load from chrome.storage or localStorage
+  // Load settings on mount
   useEffect(() => {
-    const load = async () => {
-      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-        chrome.storage.local.get(['theme', 'jsonViewTheme', 'minRawDataHeight', 'apexClassMappingsJson', 'alwaysExpandedJson'], (result) => {
-          setSettings({
-            theme: result.theme || DEFAULTS.theme,
-            jsonViewTheme: result.jsonViewTheme || DEFAULTS.jsonViewTheme,
-            minRawDataHeight: typeof result.minRawDataHeight === 'number' ? result.minRawDataHeight : DEFAULTS.minRawDataHeight,
-            apexClassMappingsJson: result.apexClassMappingsJson || DEFAULTS.apexClassMappingsJson,
-            alwaysExpandedJson: typeof result.alwaysExpandedJson === 'boolean' ? result.alwaysExpandedJson : DEFAULTS.alwaysExpandedJson,
-          });
-        });
-      } else {
-        // fallback to localStorage
-        setSettings({
-          theme: (localStorage.getItem('theme') as 'light' | 'dark') || DEFAULTS.theme,
-          jsonViewTheme: (localStorage.getItem('jsonViewTheme') as OptionsSettings['jsonViewTheme']) || DEFAULTS.jsonViewTheme,
-          minRawDataHeight: Number(localStorage.getItem('minRawDataHeight')) || DEFAULTS.minRawDataHeight,
-          apexClassMappingsJson: localStorage.getItem('apexClassMappingsJson') || DEFAULTS.apexClassMappingsJson,
-          alwaysExpandedJson: localStorage.getItem('alwaysExpandedJson') === 'true' || DEFAULTS.alwaysExpandedJson,
-        });
+    const storageSync = StorageSync.getInstance();
+    
+    const loadSettings = async () => {
+      try {
+        const loadedSettings = await storageSync.loadSettings();
+        setSettings(loadedSettings);
+        console.log('Settings loaded:', loadedSettings);
+      } catch (error) {
+        console.error('Failed to load settings:', error);
       }
     };
-    load();
+
+    loadSettings();
   }, []);
 
-  // Save to chrome.storage or localStorage
-  const save = (newSettings: Partial<OptionsSettings>) => {
-    const updated = { ...settings, ...newSettings };
-    setSettings(updated);
-    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-      chrome.storage.local.set(updated);
-    } else {
-      localStorage.setItem('theme', updated.theme);
-      localStorage.setItem('jsonViewTheme', updated.jsonViewTheme);
-      if (typeof updated.minRawDataHeight === 'number') {
-        localStorage.setItem('minRawDataHeight', String(updated.minRawDataHeight));
-      }
-      if (updated.apexClassMappingsJson !== undefined) {
-        localStorage.setItem('apexClassMappingsJson', updated.apexClassMappingsJson);
-      }
-      if (updated.alwaysExpandedJson !== undefined) {
-        localStorage.setItem('alwaysExpandedJson', String(updated.alwaysExpandedJson));
-      }
+  // Listen for settings changes from other contexts
+  useEffect(() => {
+    const storageSync = StorageSync.getInstance();
+    
+    const handleSettingsChange = (newSettings: OptionsSettings) => {
+      console.log('Settings updated from sync:', newSettings);
+      setSettings(newSettings);
+    };
+
+    storageSync.addListener(handleSettingsChange);
+
+    return () => {
+      storageSync.removeListener(handleSettingsChange);
+    };
+  }, []);
+
+  // Save settings
+  const save = async (newSettings: Partial<OptionsSettings>) => {
+    try {
+      const storageSync = StorageSync.getInstance();
+      const updated = await storageSync.saveSettings(newSettings);
+      setSettings(updated);
+      console.log('Settings saved and updated:', newSettings);
+    } catch (error) {
+      console.error('Failed to save settings:', error);
     }
   };
 

@@ -1,35 +1,32 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { viteStaticCopy } from "vite-plugin-static-copy";
 import { resolve } from "path";
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    viteStaticCopy({
-      targets: [
-        { src: "manifest.json", dest: "." },
-        { src: "icon16.png", dest: "." },
-        { src: "icon32.png", dest: "." },
-        { src: "icon48.png", dest: "." },
-        { src: "icon128.png", dest: "." },
-        { src: "devtools.html", dest: "." },
-        { src: "devtools.js", dest: "." },
-        { src: "info.html", dest: "." },
-      ], 
-    }),
-  ],
+  base: './', // Critical for Chrome extensions - use relative paths
+  plugins: [react()],
   build: {
+    assetsInlineLimit: 0, // Prevent inlining assets for better debugging
+    outDir: 'dist',
     rollupOptions: {
+      output: {
+        entryFileNames: '[name].js',
+        chunkFileNames: '[name].js', 
+        assetFileNames: '[name].[ext]'
+      },
+      external: [
+        // These are static files that will be copied from public directory
+        './devtools.js'
+      ],
       input: {
+        // Entry points for each HTML page in the extension
         options: resolve(__dirname, "options.html"),
         panel: resolve(__dirname, "panel.html"),
         devtools: resolve(__dirname, "devtools.html"),
       },
-      output: {
-        entryFileNames: "[name].js",
-      },
     },
   },
+  // Let Vite handle the public directory automatically
+  publicDir: 'public',
 });

@@ -1,4 +1,4 @@
-import "../global.css";
+import "../../global.css";
 import React from "react";
 import { useOptionsSettings } from "./useOptionsSettings";
 
@@ -70,6 +70,42 @@ const Options = () => {
                 onChange={e => saveSettings({ minRawDataHeight: Number(e.target.value) })}
               />
             </div>
+            {/* TODO: Future boxcar color brightness controls could be added here:
+                <div className="flex flex-col gap-2">
+                  <label className="font-semibold text-sm mb-1">Boxcar Icon Colors:</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={allowBrightColors}
+                      onChange={e => saveSettings({ allowBrightColors: e.target.checked })}
+                    />
+                    <span>Allow bright colors</span>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs text-gray-600 dark:text-gray-400">Color brightness range:</label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs">Dark</span>
+                      <input
+                        type="range"
+                        min="25"
+                        max="75"
+                        value={minLightness}
+                        onChange={e => saveSettings({ minLightness: Number(e.target.value) })}
+                        className="flex-1"
+                      />
+                      <input
+                        type="range"
+                        min="35"
+                        max="85"
+                        value={maxLightness}
+                        onChange={e => saveSettings({ maxLightness: Number(e.target.value) })}
+                        className="flex-1"
+                      />
+                      <span className="text-xs">Bright</span>
+                    </div>
+                  </div>
+                </div>
+            */}
             <div className="flex flex-col gap-2">
               <label className="font-semibold text-sm mb-1 flex items-center gap-2">
                 Apex Class Mappings JSON:

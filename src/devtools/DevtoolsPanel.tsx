@@ -9,6 +9,98 @@ function generateBoxcarId() {
   return 'boxcar-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
+// Store last generated color for contrast checking and cache colors per boxcarId
+let lastGeneratedHue: number | null = null;
+const boxcarColorCache = new Map<string, string>();
+
+// Calculate color difference for contrast (hue distance on color wheel)
+function calculateHueDistance(hue1: number, hue2: number): number {
+  const diff = Math.abs(hue1 - hue2);
+  return Math.min(diff, 360 - diff); // Account for circular nature of hue
+}
+
+// Generate random colors for truck icons with high contrast from previous color
+function generateTruckColor(boxcarId: string): string {
+  // Check if we already have a color for this boxcarId
+  if (boxcarColorCache.has(boxcarId)) {
+    return boxcarColorCache.get(boxcarId)!;
+  }
+  
+  // Use boxcarId as seed for consistent colors per boxcar group
+  let hash = 0;
+  for (let i = 0; i < boxcarId.length; i++) {
+    const char = boxcarId.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  
+  // Generate base hue from hash
+  let hue = Math.abs(hash) % 360;
+  
+  // Ensure high contrast with last generated color (minimum 60° difference)
+  if (lastGeneratedHue !== null) {
+    let attempts = 0;
+    while (calculateHueDistance(hue, lastGeneratedHue) < 60 && attempts < 10) {
+      // Adjust hue to create more contrast
+      hash = (hash * 1103515245 + 12345) & 0x7fffffff; // Linear congruential generator
+      hue = Math.abs(hash) % 360;
+      attempts++;
+    }
+  }
+  
+  // Store this hue as the last generated for next comparison (only for new boxcarIds)
+  lastGeneratedHue = hue;
+  
+  // Generate saturation and lightness with good visibility
+  // TODO: Add user preference options for brightness control:
+  // - allowBrightColors: boolean (default: true)
+  // - maxLightness: number (default: 65, could be reduced to 55 for dimmer colors)
+  // - minLightness: number (default: 45, could be increased to 35 for darker colors)
+  const saturation = 65 + (Math.abs(hash) % 25); // 65-90%
+  const lightness = 45 + (Math.abs(hash) % 20); // 45-65%
+  
+  const color = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+  
+  // Cache the color for this boxcarId so all rows in the group get the same color
+  boxcarColorCache.set(boxcarId, color);
+  
+  return color;
+}
+
+// Dynamic colored truck SVG component
+function TruckIcon({ boxcarId, size = 16 }: { boxcarId: string; size?: number }) {
+  const color = generateTruckColor(boxcarId);
+  
+  return (
+    <img 
+      src="/images/boxcar_truck.svg" 
+      width={size} 
+      height={size} 
+      style={{ 
+        filter: `brightness(0) saturate(100%) ${getColorFilter(color)}`,
+        display: 'inline-block',
+        verticalAlign: 'middle'
+      }}
+      alt="Truck icon"
+    />
+  );
+}
+
+// Helper function to convert HSL color to CSS filter
+function getColorFilter(hslColor: string): string {
+  // Extract hue, saturation, lightness from hsl(h, s%, l%) format
+  const hslMatch = hslColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+  if (!hslMatch) return '';
+  
+  const hue = parseInt(hslMatch[1]);
+  const saturation = parseInt(hslMatch[2]);
+  const lightness = parseInt(hslMatch[3]);
+  
+  // Convert to CSS filter values
+  // hue-rotate for hue, saturate for saturation, brightness for lightness
+  return `hue-rotate(${hue}deg) saturate(${saturation / 100 + 0.5}) brightness(${lightness / 50})`;
+}
+
 // Types for Apex Action
 interface ApexAction {
   id: string;
@@ -223,69 +315,529 @@ const DevtoolsPanel: React.FC = () => {
             // Handle VisualForce Remoting calls
             console.debug('[Apex Inspector] Processing VisualForce Remoting call');
             
-            // VisualForce Remoting request structure:
-            // {
-            //   "action": "TestApexController",           // Apex class name
-            //   "method": "simpleRemoteMethod",          // Method name
-            //   "data": ["Hello World"],                 // Method parameters (array)
-            //   "type": "rpc",                          // Always "rpc" for remoting
-            //   "tid": 3,                               // Transaction ID
-            //   "ctx": { ... }                          // Context (ignored per requirements)
-            // }
-            const vfReq = reqPostData as {
-              action?: string;
-              method?: string;
-              data?: unknown;
-              type?: string;
-              tid?: number;
-              ctx?: Record<string, unknown>; // We ignore this as per instructions
-            };
+            // VisualForce Remoting request structure is an array of requests:
+            // [
+            //   {
+            //     "action": "TestApexController",           // Apex class name
+            //     "method": "simpleRemoteMethod",          // Method name
+            //     "data": ["Hello World"],                 // Method parameters (array)
+            //     "type": "rpc",                          // Always "rpc" for remoting
+            //     "tid": 3,                               // Transaction ID
+            //     "ctx": { ... }                          // Context (ignored per requirements)
+            //   },
+            //   // ... more requests
+            // ]
             
-            const apexClass = vfReq.action || '[Unknown Class]';
-            const apexMethod = vfReq.method || '[Unknown Method]';
-            const requestData = vfReq.data || {};
+            // Handle both single VF call and batch VF calls
+            let vfRequests: unknown[] = [];
+            if (Array.isArray(reqPostData)) {
+              // Multiple VF remoting calls (batch)
+              vfRequests = reqPostData;
+            } else if (reqPostData && typeof reqPostData === 'object') {
+              // Single VF remoting call - check if it has the VF structure
+              const singleVfReq = reqPostData as Record<string, unknown>;
+              if (singleVfReq.action && singleVfReq.method && singleVfReq.type === 'rpc') {
+                // This is a single VF remoting call
+                vfRequests = [reqPostData];
+              } else {
+                // Not a VF remoting call structure
+                console.debug('[Apex Inspector] Request data does not match VF remoting structure:', reqPostData);
+                return;
+              }
+            }
             
-            console.debug('[Apex Inspector] VF Remoting parsed - Class:', apexClass, 'Method:', apexMethod, 'Data:', requestData);
+            console.debug('[Apex Inspector] Found VF Remoting requests:', vfRequests.length);
             
-            // Handle VF remoting response - the response structure can vary
+            // Parse response - can be single object or array depending on request
+            let vfResponses: unknown[] = [];
+            if (resJson && Array.isArray(resJson)) {
+              // Multiple responses (corresponds to batch requests)
+              vfResponses = resJson;
+            } else if (resJson && typeof resJson === 'object') {
+              // Single response (corresponds to single request)
+              vfResponses = [resJson];
+            }
+            
+            // Determine if this is a boxcarred request (more than one VF call)
+            let boxcarId: string | undefined = undefined;
+            if (vfRequests.length > 1) {
+              boxcarId = generateBoxcarId();
+            }
+            
+            // Process each VF remoting request
+            vfRequests.forEach((vfReqItem: unknown, idx: number) => {
+              if (vfReqItem && typeof vfReqItem === 'object') {
+                const vfReq = vfReqItem as {
+                  action?: string;
+                  method?: string;
+                  data?: unknown;
+                  type?: string;
+                  tid?: number;
+                  ctx?: Record<string, unknown>; // We ignore this as per instructions
+                };
+                
+                const apexClass = vfReq.action || '[Unknown Class]';
+                const apexMethod = vfReq.method || '[Unknown Method]';
+                const requestData = vfReq.data || {};
+                
+                console.debug(`[Apex Inspector] VF Remoting [${idx}] parsed - Class:`, apexClass, 'Method:', apexMethod, 'Data:', requestData);
+                
+                // Handle VF remoting response for this specific request
+                let responseObj: Record<string, unknown> = {};
+                let error: string | null = null;
+                
+                // Get the corresponding response for this request (by index)
+                const vfResponse = vfResponses[idx];
+                if (vfResponse && typeof vfResponse === 'object') {
+                  const vfRespObj = vfResponse as Record<string, unknown>;
+                  
+                  // Check if response has an 'error' field indicating an error occurred
+                  if (vfRespObj.error) {
+                    error = 'VisualForce Remoting error occurred';
+                    if (typeof vfRespObj.error === 'string') {
+                      error = vfRespObj.error;
+                    } else if (typeof vfRespObj.error === 'object' && vfRespObj.error !== null) {
+                      const errorObj = vfRespObj.error as Record<string, unknown>;
+                      if (errorObj.message && typeof errorObj.message === 'string') {
+                        error = errorObj.message;
+                      }
+                    }
+                    responseObj = vfRespObj;
+                  } else {
+                    // For successful VF remoting calls, the response often contains a 'result' field
+                    // or the data might be directly in the response - we'll store the whole response
+                    responseObj = vfRespObj;
+                  }
+                }
+                
+                setActions((prev) => [
+                  ...prev,
+                  {
+                    id: `vfremoting-${request.requestId || request.request.url}-${idx}-${Date.now()}`,
+                    timestamp: request.startedDateTime ? new Date(request.startedDateTime).getTime() : Date.now(),
+                    apexClass: apexClass,
+                    method: apexMethod,
+                    latency: request.time,
+                    request: requestData as Record<string, unknown>,
+                    response: responseObj,
+                    rawRequest: vfReq,
+                    rawResponse: vfResponse || {},
+                    context: {
+                      isVfRemoting: true,
+                      tid: vfReq.tid,
+                      requestType: vfReq.type,
+                    }, // We don't include ctx as per instructions
+                    network: {
+                      requestId: request.requestId || request.request.url,
+                      url: request.request.url,
+                      latency: request.time,
+                    },
+                    fullResponse: resJson as Record<string, unknown>,
+                    fullRequest: request,
+                    error,
+                    boxcarId, // Present if multiple VF remoting calls in one request
+                  },
+                ]);
+              }
+            });
+            return; // Exit early for VF remoting calls
+          }
+
+          // Check if this is a GraphQL call (different structure)
+          const isGraphQLCall = request.request.url.includes('/aura') && 
+                               (request.request.url.includes('aura.RecordUi.executeGraphQL') ||
+                                request.request.url.includes('executeGraphQL'));
+          
+          if (isGraphQLCall) {
+            // Handle GraphQL calls
+            console.debug('[Apex Inspector] Processing GraphQL call');
+            
+            // GraphQL request structure is similar to aura but contains GraphQL queries
+            // The request might have actions with GraphQL queries in the params
+            let actionsArr: unknown[] = [];
+            if (
+              reqPostData &&
+              typeof reqPostData === 'object' &&
+              reqPostData !== null &&
+              Array.isArray((reqPostData as { actions?: unknown[] }).actions)
+            ) {
+              actionsArr = (reqPostData as { actions: unknown[] }).actions;
+              console.debug('[Apex Inspector] Found GraphQL actions array:', actionsArr);
+              
+              actionsArr.forEach((action: unknown, idx: number) => {
+                console.debug('[Apex Inspector] Processing GraphQL action:', action);
+                if (typeof action === "object" && action !== null) {
+                  const actionObj = action as Record<string, unknown>;
+                  const paramsObj = actionObj.params || {};
+                  console.debug('[Apex Inspector] GraphQL Params object:', paramsObj);
+                  
+                  // Extract GraphQL query information
+                  let graphqlQuery = '[Unknown Query]';
+                  let graphqlVariables: Record<string, unknown> = {};
+                  let operationType = 'query'; // Default to query
+                  
+                  // Try to extract GraphQL query from various possible locations
+                  if (typeof paramsObj === 'object' && paramsObj !== null) {
+                    const params = paramsObj as Record<string, unknown>;
+                    
+                    // Look for query in queryInput.query (Salesforce GraphQL structure)
+                    if (typeof params.queryInput === 'object' && params.queryInput !== null) {
+                      const queryInput = params.queryInput as Record<string, unknown>;
+                      if (typeof queryInput.query === 'string') {
+                        graphqlQuery = queryInput.query;
+                      }
+                      
+                      // Extract variables from queryInput if present
+                      if (typeof queryInput.variables === 'object' && queryInput.variables !== null) {
+                        graphqlVariables = queryInput.variables as Record<string, unknown>;
+                      }
+                    }
+                    // Fallback to common GraphQL parameter locations
+                    else if (typeof params.query === 'string') {
+                      graphqlQuery = params.query;
+                    } else if (typeof params.graphQL === 'string') {
+                      graphqlQuery = params.graphQL;
+                    } else if (typeof params.gql === 'string') {
+                      graphqlQuery = params.gql;
+                    }
+                    
+                    // Extract variables if present at top level (fallback)
+                    if (Object.keys(graphqlVariables).length === 0 && 
+                        typeof params.variables === 'object' && params.variables !== null) {
+                      graphqlVariables = params.variables as Record<string, unknown>;
+                    }
+                    
+                    // Try to determine operation type from query
+                    if (graphqlQuery.trim().toLowerCase().startsWith('mutation')) {
+                      operationType = 'mutation';
+                    } else if (graphqlQuery.trim().toLowerCase().startsWith('subscription')) {
+                      operationType = 'subscription';
+                    }
+                  }
+                  
+                  console.debug('[Apex Inspector] Extracted GraphQL query:', graphqlQuery);
+                  console.debug('[Apex Inspector] GraphQL variables:', graphqlVariables);
+                  console.debug('[Apex Inspector] Operation type:', operationType);
+                  console.debug('[Apex Inspector] Query length:', graphqlQuery.length);
+                  
+                  // Handle GraphQL response
+                  let responseObj: Record<string, unknown> = {};
+                  let error: string | null = null;
+                  
+                  if (resJson && typeof resJson === 'object') {
+                    const resJsonObj = resJson as Record<string, unknown>;
+                    const actionsResponse = resJsonObj.actions;
+                    
+                    if (Array.isArray(actionsResponse)) {
+                      const actionResponse = actionsResponse[idx];
+                      
+                      if (actionResponse && typeof actionResponse === 'object') {
+                        const actionRespObj = actionResponse as Record<string, unknown>;
+                        
+                        // Check for GraphQL errors
+                        if (actionRespObj.state === 'ERROR') {
+                          error = 'GraphQL error occurred';
+                          if (Array.isArray(actionRespObj.error) && actionRespObj.error.length > 0) {
+                            const errorObj = actionRespObj.error[0];
+                            if (typeof errorObj === 'object' && errorObj !== null && 'message' in errorObj) {
+                              error = String(errorObj.message);
+                            }
+                          }
+                          responseObj = actionRespObj;
+                        } else {
+                          // For successful GraphQL calls, extract the return value
+                          const returnValue = actionRespObj.returnValue;
+                          if (returnValue && typeof returnValue === 'object') {
+                            responseObj = returnValue as Record<string, unknown>;
+                          } else {
+                            responseObj = actionRespObj;
+                          }
+                        }
+                      }
+                    }
+                  }
+                  
+                  setActions((prev) => [
+                    ...prev,
+                    {
+                      id: `graphql-${request.requestId || request.request.url}-${idx}-${Date.now()}`,
+                      timestamp: request.startedDateTime ? new Date(request.startedDateTime).getTime() : Date.now(),
+                      apexClass: 'GraphQL',
+                      method: operationType,
+                      latency: request.time,
+                      request: {
+                        query: graphqlQuery,
+                        variables: graphqlVariables,
+                        ...paramsObj as Record<string, unknown>
+                      },
+                      response: responseObj,
+                      rawRequest: action,
+                      rawResponse: Array.isArray((resJson as Record<string, unknown>)?.actions) 
+                        ? ((resJson as Record<string, unknown>).actions as unknown[])[idx] || {}
+                        : {},
+                      context: {
+                        isGraphQL: true,
+                        operationType: operationType,
+                        queryLength: graphqlQuery.length
+                      },
+                      network: {
+                        requestId: request.requestId || request.request.url,
+                        url: request.request.url,
+                        latency: request.time,
+                      },
+                      fullResponse: resJson as Record<string, unknown>,
+                      fullRequest: request,
+                      error,
+                      // No boxcarId for GraphQL calls as they are typically single operations
+                    },
+                  ]);
+                }
+              });
+            }
+            return; // Exit early for GraphQL calls
+          }
+
+          // Handle uiRecordApi calls (e.g., getRecordWithFields, updateRecord, createRecord, etc.)
+          const isUiRecordApiCall = request.request.url.includes('/aura') && (
+            // Method 1: URL-based detection (e.g., aura.RecordUi.getRecordWithFields=1)
+            request.request.url.includes('aura.RecordUi.') ||
+            // Method 2: Descriptor-based detection in request data
+            (reqPostData && 
+             typeof reqPostData === 'object' && 
+             reqPostData !== null &&
+             (() => {
+               // Parse the message if it's URL-encoded
+               let dataToCheck = reqPostData as Record<string, unknown>;
+               if (dataToCheck.message && typeof dataToCheck.message === 'string') {
+                 try {
+                   dataToCheck = JSON.parse(dataToCheck.message);
+                 } catch (parseError) {
+                   // If parsing fails, use original data
+                   console.debug('[Apex Inspector] Failed to parse message in uiRecordApi detection:', parseError);
+                 }
+               }
+               
+               // Check if any action has RecordUiController descriptor
+               if (dataToCheck.actions && Array.isArray(dataToCheck.actions)) {
+                 return dataToCheck.actions.some((action: unknown) => {
+                   if (action && typeof action === 'object') {
+                     const actionObj = action as Record<string, unknown>;
+                     const descriptor = actionObj.descriptor;
+                     return typeof descriptor === 'string' && 
+                            descriptor.includes('RecordUiController');
+                   }
+                   return false;
+                 });
+               }
+               
+               // Check descriptor at root level (fallback)
+               const descriptor = dataToCheck.descriptor;
+               return typeof descriptor === 'string' && descriptor.includes('RecordUiController');
+             })())
+          );
+          
+          if (isUiRecordApiCall) {
+            console.debug('[Apex Inspector] Processing uiRecordApi call:', request.request.url);
+            
+            // Extract uiRecordApi method from URL or descriptor
+            let uiMethod = 'unknown';
+            if (request.request.url.includes('aura.RecordUi.')) {
+              // Method 1: Extract from URL (e.g., aura.RecordUi.getRecordWithFields=1)
+              const methodMatch = request.request.url.match(/aura\.RecordUi\.([^=&]+)/);
+              if (methodMatch) {
+                uiMethod = methodMatch[1];
+              }
+            } else {
+              // Method 2: Extract from descriptor in request data
+              let dataToProcess = reqPostData as Record<string, unknown>;
+              
+              // Parse message if URL-encoded
+              if (dataToProcess.message && typeof dataToProcess.message === 'string') {
+                try {
+                  dataToProcess = JSON.parse(dataToProcess.message);
+                } catch (parseError) {
+                  console.debug('[Apex Inspector] Failed to parse message for method extraction:', parseError);
+                }
+              }
+              
+              // Look for descriptor in actions array
+              if (dataToProcess.actions && Array.isArray(dataToProcess.actions) && dataToProcess.actions.length > 0) {
+                const firstAction = dataToProcess.actions[0] as Record<string, unknown>;
+                if (firstAction.descriptor && typeof firstAction.descriptor === 'string') {
+                  const descriptor = firstAction.descriptor;
+                  const methodMatch = descriptor.match(/ACTION\$([^"]+)/);
+                  if (methodMatch) {
+                    uiMethod = methodMatch[1];
+                  }
+                }
+              }
+              // Fallback: check descriptor at root level
+              else if (dataToProcess.descriptor && typeof dataToProcess.descriptor === 'string') {
+                const descriptor = dataToProcess.descriptor;
+                const methodMatch = descriptor.match(/ACTION\$([^"]+)/);
+                if (methodMatch) {
+                  uiMethod = methodMatch[1];
+                }
+              }
+            }
+
+            // Extract parameters from request
+            let recordId: string | undefined;
+            let fields: string[] = [];
+            let layoutType: string | undefined;
+            let modes: string[] = [];
+            let recordTypeId: string | undefined;
+            let apiName: string | undefined;
+            let recordInput: Record<string, unknown> | undefined;
+            
+            if (reqPostData && typeof reqPostData === 'object' && reqPostData !== null) {
+              // Handle message-based requests (POST data with message parameter)
+              let dataToProcess = reqPostData as Record<string, unknown>;
+              
+              // If there's a message parameter, parse it as JSON
+              if (dataToProcess.message && typeof dataToProcess.message === 'string') {
+                try {
+                  const messageData = JSON.parse(dataToProcess.message);
+                  dataToProcess = messageData;
+                } catch (e) {
+                  console.debug('[Apex Inspector] Failed to parse message parameter:', e);
+                }
+              }
+              
+              // Look for actions array (typical uiRecordApi structure)
+              if (dataToProcess.actions && Array.isArray(dataToProcess.actions) && dataToProcess.actions.length > 0) {
+                const firstAction = dataToProcess.actions[0] as Record<string, unknown>;
+                if (firstAction.params && typeof firstAction.params === 'object') {
+                  const params = firstAction.params as Record<string, unknown>;
+                  
+                  // Handle createRecord structure: params.recordInput.{apiName, fields}
+                  if (params.recordInput && typeof params.recordInput === 'object') {
+                    recordInput = params.recordInput as Record<string, unknown>;
+                    apiName = recordInput.apiName as string;
+                    if (recordInput.fields && typeof recordInput.fields === 'object') {
+                      // For createRecord, fields is an object, not an array
+                      const fieldsObj = recordInput.fields as Record<string, unknown>;
+                      fields = Object.keys(fieldsObj);
+                    }
+                  }
+                  // Handle other uiRecordApi calls (getRecordWithFields, etc.)
+                  else {
+                    recordId = params.recordId as string;
+                    if (Array.isArray(params.fields)) {
+                      fields = params.fields;
+                    }
+                    layoutType = params.layoutType as string;
+                    if (Array.isArray(params.modes)) {
+                      modes = params.modes;
+                    }
+                    recordTypeId = params.recordTypeId as string;
+                  }
+                }
+              }
+              // Fallback: try to get params directly from the root
+              else if (dataToProcess.params && typeof dataToProcess.params === 'object') {
+                const params = dataToProcess.params as Record<string, unknown>;
+                
+                // Handle createRecord structure at root level
+                if (params.recordInput && typeof params.recordInput === 'object') {
+                  recordInput = params.recordInput as Record<string, unknown>;
+                  apiName = recordInput.apiName as string;
+                  if (recordInput.fields && typeof recordInput.fields === 'object') {
+                    const fieldsObj = recordInput.fields as Record<string, unknown>;
+                    fields = Object.keys(fieldsObj);
+                  }
+                }
+                // Handle other uiRecordApi calls
+                else {
+                  recordId = params.recordId as string;
+                  if (Array.isArray(params.fields)) {
+                    fields = params.fields;
+                  }
+                  layoutType = params.layoutType as string;
+                  if (Array.isArray(params.modes)) {
+                    modes = params.modes;
+                  }
+                  recordTypeId = params.recordTypeId as string;
+                }
+              }
+            }
+
+            // Handle uiRecordApi response
             let responseObj: Record<string, unknown> = {};
             let error: string | null = null;
             
             if (resJson && typeof resJson === 'object') {
-              const vfResponse = resJson as Record<string, unknown>;
+              const uiResponse = resJson as Record<string, unknown>;
               
-              // Check if response has an 'error' field indicating an error occurred
-              if (vfResponse.error) {
-                error = 'VisualForce Remoting error occurred';
-                if (typeof vfResponse.error === 'string') {
-                  error = vfResponse.error;
-                } else if (typeof vfResponse.error === 'object' && vfResponse.error !== null) {
-                  const errorObj = vfResponse.error as Record<string, unknown>;
-                  if (errorObj.message && typeof errorObj.message === 'string') {
-                    error = errorObj.message;
-                  }
+              // Check for uiRecordApi specific errors
+              if (uiResponse.error) {
+                error = 'uiRecordApi error occurred';
+                if (typeof uiResponse.error === 'string') {
+                  error = uiResponse.error;
+                } else if (typeof uiResponse.error === 'object' && uiResponse.error !== null) {
+                  error = JSON.stringify(uiResponse.error);
                 }
-                responseObj = vfResponse;
+                responseObj = uiResponse;
+              } else if (uiResponse.errors && Array.isArray(uiResponse.errors) && uiResponse.errors.length > 0) {
+                error = 'uiRecordApi errors occurred';
+                error = JSON.stringify(uiResponse.errors);
+                responseObj = uiResponse;
               } else {
-                // For successful VF remoting calls, the response often contains a 'result' field
-                // or the data might be directly in the response - we'll store the whole response
-                responseObj = vfResponse;
+                // For successful uiRecordApi calls, extract the meaningful response data
+                if (uiResponse.actions && Array.isArray(uiResponse.actions) && uiResponse.actions.length > 0) {
+                  // For uiRecordApi, the first action's returnValue contains the actual API response
+                  const firstAction = uiResponse.actions[0] as Record<string, unknown>;
+                  if (firstAction && firstAction.returnValue) {
+                    // Use the returnValue as the main response since it contains the record data
+                    responseObj = firstAction.returnValue as Record<string, unknown>;
+                  } else {
+                    // Fallback: keep the full action if no returnValue
+                    responseObj = {
+                      id: firstAction.id,
+                      descriptor: firstAction.descriptor,
+                      callingDescriptor: firstAction.callingDescriptor,
+                      returnValue: firstAction.returnValue,
+                      error: firstAction.error,
+                      state: firstAction.state,
+                    };
+                  }
+                } else {
+                  // Fallback: store the whole response if no actions found
+                  responseObj = uiResponse;
+                }
               }
             }
+            
+            // Build request object with only non-empty/defined values
+            const requestObj: Record<string, unknown> = {};
+            if (recordId) requestObj.recordId = recordId;
+            if (fields.length > 0) requestObj.fields = fields;
+            if (layoutType) requestObj.layoutType = layoutType;
+            if (modes.length > 0) requestObj.modes = modes;
+            if (recordTypeId) requestObj.recordTypeId = recordTypeId;
+            if (apiName) requestObj.apiName = apiName;
+            if (recordInput) requestObj.recordInput = recordInput;
             
             setActions((prev) => [
               ...prev,
               {
-                id: `vfremoting-${request.requestId || request.request.url}-${Date.now()}`,
+                id: `uirecordapi-${request.requestId || request.request.url}-${Date.now()}`,
                 timestamp: request.startedDateTime ? new Date(request.startedDateTime).getTime() : Date.now(),
-                apexClass: apexClass,
-                method: apexMethod,
+                apexClass: 'uiRecordApi',
+                method: uiMethod,
                 latency: request.time,
-                request: requestData as Record<string, unknown>,
+                request: requestObj,
                 response: responseObj,
                 rawRequest: reqPostData,
                 rawResponse: resJson || {},
-                context: {}, // We don't include ctx as per instructions
+                context: {
+                  isUiRecordApi: true,
+                  methodName: uiMethod,
+                  recordId,
+                  fieldsCount: fields.length,
+                  hasLayoutType: !!layoutType,
+                  apiName,
+                },
                 network: {
                   requestId: request.requestId || request.request.url,
                   url: request.request.url,
@@ -294,10 +846,10 @@ const DevtoolsPanel: React.FC = () => {
                 fullResponse: resJson as Record<string, unknown>,
                 fullRequest: request,
                 error,
-                // No boxcarId for VF remoting calls as they are typically single actions
+                // No boxcarId for uiRecordApi calls as they are typically single operations
               },
             ]);
-            return; // Exit early for VF remoting calls
+            return; // Exit early for uiRecordApi calls
           }
 
           // Handle Lightning/Aura calls (original logic)
@@ -813,7 +1365,7 @@ const DevtoolsPanel: React.FC = () => {
                 {selectedRow.boxcarId && (
                   <div className="relative group inline-block align-middle">
                     <span className="text-indigo-600 dark:text-indigo-400 cursor-help">
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.2"/></svg>
+                      <TruckIcon boxcarId={selectedRow.boxcarId} />
                     </span>
                     <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
                       Boxcarred Request<br />ID: {selectedRow.boxcarId}
@@ -1304,7 +1856,7 @@ const DevtoolsPanel: React.FC = () => {
                     {row.boxcarId && (
                       <div className="relative group inline-block align-middle">
                         <span className="text-indigo-600 dark:text-indigo-400 cursor-help">
-                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" fill="currentColor" fillOpacity="0.2"/></svg>
+                          <TruckIcon boxcarId={row.boxcarId} />
                         </span>
                         <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
                           Boxcarred Request<br />ID: {row.boxcarId}

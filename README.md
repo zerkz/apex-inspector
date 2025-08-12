@@ -1,4 +1,4 @@
-# Apex Inspector Chrome DevTools Extension ![apex inspector logo](icon48.png)
+# Apex Inspector Chrome DevTools Extension ![apex inspector logo](public/images/icon48.png)
 
 Apex Inspector is a Chrome DevTools extension for Salesforce developers that provides deep visibility into Apex HTTP calls and Salesforce API activity across multiple platforms. It supports calls made via the `/aura` endpoint (Lightning/Aura), `/webruntime/api/apex/execute` (Experience Cloud/Communities), `/apexremote` (VisualForce Remoting), GraphQL API calls, and Lightning Data Service operations. It is designed to help you debug, inspect, and analyze Salesforce network activity directly from your browser's DevTools.
 

@@ -1,0 +1,213 @@
+<apex:page controller="TestApexController" showHeader="true" sidebar="true">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    
+    <apex:slds />
+    
+    <div class="slds-scope">
+        <div class="slds-m-around_large">
+            <div class="slds-card">
+                <div class="slds-card__header slds-grid">
+                    <div class="slds-media slds-media_center slds-has-flexi-truncate">
+                        <div class="slds-media__body">
+                            <h2 class="slds-card__header-title">
+                                <span>Visualforce Remoting Test Page</span>
+                            </h2>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="slds-card__body slds-card__body_inner">
+                    
+                    <!-- Simple Remote Method Test -->
+                    <div class="slds-m-bottom_large">
+                        <h3 class="slds-text-heading_small slds-m-bottom_small">Simple Remote Method</h3>
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label" for="simpleInput">Input String:</label>
+                            <div class="slds-form-element__control">
+                                <input type="text" id="simpleInput" class="slds-input" value="Hello World" />
+                            </div>
+                        </div>
+                        <button class="slds-button slds-button_brand slds-m-top_small" onclick="callSimpleRemote()">
+                            Call Simple Remote Method
+                        </button>
+                        <div id="simpleResult" class="slds-m-top_small"></div>
+                    </div>
+                    
+                    <!-- Complex Remote Method Test -->
+                    <div class="slds-m-bottom_large">
+                        <h3 class="slds-text-heading_small slds-m-bottom_small">Complex Remote Method</h3>
+                        <div class="slds-grid slds-wrap slds-gutters">
+                            <div class="slds-col slds-size_1-of-3">
+                                <div class="slds-form-element">
+                                    <label class="slds-form-element__label" for="complexName">Name:</label>
+                                    <div class="slds-form-element__control">
+                                        <input type="text" id="complexName" class="slds-input" value="Test Item" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="slds-col slds-size_1-of-3">
+                                <div class="slds-form-element">
+                                    <label class="slds-form-element__label" for="complexCount">Count:</label>
+                                    <div class="slds-form-element__control">
+                                        <input type="number" id="complexCount" class="slds-input" value="3" />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="slds-col slds-size_1-of-3">
+                                <div class="slds-form-element">
+                                    <label class="slds-form-element__label" for="complexFlag">Flag:</label>
+                                    <div class="slds-form-element__control">
+                                        <input type="checkbox" id="complexFlag" checked="checked" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <button class="slds-button slds-button_brand slds-m-top_small" onclick="callComplexRemote()">
+                            Call Complex Remote Method
+                        </button>
+                        <div id="complexResult" class="slds-m-top_small"></div>
+                    </div>
+                    
+                    <!-- Error Testing -->
+                    <div class="slds-m-bottom_large">
+                        <h3 class="slds-text-heading_small slds-m-bottom_small">Error Testing</h3>
+                        <button class="slds-button slds-button_destructive slds-m-right_small" onclick="callWithError(true)">
+                            Call with Error
+                        </button>
+                        <button class="slds-button slds-button_success" onclick="callWithError(false)">
+                            Call without Error
+                        </button>
+                        <div id="errorResult" class="slds-m-top_small"></div>
+                    </div>
+                    
+                    <!-- Data Query Test -->
+                    <div class="slds-m-bottom_large">
+                        <h3 class="slds-text-heading_small slds-m-bottom_small">Query Data</h3>
+                        <div class="slds-form-element">
+                            <label class="slds-form-element__label" for="limitInput">Limit:</label>
+                            <div class="slds-form-element__control">
+                                <input type="number" id="limitInput" class="slds-input" value="5" min="1" max="20" />
+                            </div>
+                        </div>
+                        <button class="slds-button slds-button_brand slds-m-top_small" onclick="queryAccounts()">
+                            Query Accounts
+                        </button>
+                        <div id="queryResult" class="slds-m-top_small"></div>
+                    </div>
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Simple Remote Method Call
+        function callSimpleRemote() {
+            var input = document.getElementById('simpleInput').value;
+            showLoading('simpleResult');
+            
+            TestApexController.simpleRemoteMethod(input, function(result, event) {
+                if (event.status) {
+                    showSuccess('simpleResult', 'Result: ' + result);
+                } else {
+                    showError('simpleResult', 'Error: ' + event.message);
+                }
+            }, {escape: false});
+        }
+        
+        // Complex Remote Method Call
+        function callComplexRemote() {
+            var name = document.getElementById('complexName').value;
+            var count = parseInt(document.getElementById('complexCount').value);
+            var flag = document.getElementById('complexFlag').checked;
+            
+            showLoading('complexResult');
+            
+            TestApexController.complexRemoteMethod(name, count, flag, function(result, event) {
+                if (event.status) {
+                    var resultHtml = '<ul class="slds-list_dotted">';
+                    result.forEach(function(item) {
+                        resultHtml += '<li>' + item + '</li>';
+                    });
+                    resultHtml += '</ul>';
+                    showSuccess('complexResult', resultHtml);
+                } else {
+                    showError('complexResult', 'Error: ' + event.message);
+                }
+            }, {escape: false});
+        }
+        
+        // Error Testing
+        function callWithError(shouldError) {
+            showLoading('errorResult');
+            
+            TestApexController.remoteMethodWithError(shouldError, function(result, event) {
+                if (event.status) {
+                    var resultHtml = '<strong>Success:</strong><br/>';
+                    resultHtml += 'Message: ' + result.message + '<br/>';
+                    resultHtml += 'Timestamp: ' + result.timestamp;
+                    showSuccess('errorResult', resultHtml);
+                } else {
+                    showError('errorResult', 'Error: ' + event.message + '<br/>Type: ' + event.type);
+                }
+            }, {escape: false});
+        }
+        
+        // Query Accounts
+        function queryAccounts() {
+            var limit = parseInt(document.getElementById('limitInput').value);
+            showLoading('queryResult');
+            
+            TestApexController.getAccountsRemote(limit, function(result, event) {
+                if (event.status) {
+                    if (result && result.length > 0) {
+                        var resultHtml = '<table class="slds-table slds-table_cell-buffer slds-table_bordered">';
+                        resultHtml += '<thead><tr class="slds-line-height_reset">';
+                        resultHtml += '<th scope="col">Name</th><th scope="col">Type</th><th scope="col">Industry</th>';
+                        resultHtml += '</tr></thead><tbody>';
+                        
+                        result.forEach(function(account) {
+                            resultHtml += '<tr class="slds-hint-parent">';
+                            resultHtml += '<td>' + (account.Name || '') + '</td>';
+                            resultHtml += '<td>' + (account.Type || '') + '</td>';
+                            resultHtml += '<td>' + (account.Industry || '') + '</td>';
+                            resultHtml += '</tr>';
+                        });
+                        resultHtml += '</tbody></table>';
+                        showSuccess('queryResult', resultHtml);
+                    } else {
+                        showSuccess('queryResult', 'No accounts found.');
+                    }
+                } else {
+                    showError('queryResult', 'Error: ' + event.message);
+                }
+            }, {escape: false});
+        }
+        
+        // Helper functions for UI updates
+        function showLoading(elementId) {
+            document.getElementById(elementId).innerHTML = 
+                '<div class="slds-spinner slds-spinner_brand slds-spinner_small" role="status">' +
+                '<span class="slds-assistive-text">Loading</span>' +
+                '<div class="slds-spinner__dot-a"></div>' +
+                '<div class="slds-spinner__dot-b"></div>' +
+                '</div>';
+        }
+        
+        function showSuccess(elementId, message) {
+            document.getElementById(elementId).innerHTML = 
+                '<div class="slds-notify slds-notify_alert slds-theme_success">' +
+                '<span class="slds-assistive-text">success</span>' +
+                message +
+                '</div>';
+        }
+        
+        function showError(elementId, message) {
+            document.getElementById(elementId).innerHTML = 
+                '<div class="slds-notify slds-notify_alert slds-theme_error">' +
+                '<span class="slds-assistive-text">error</span>' +
+                message +
+                '</div>';
+        }
+    </script>
+</apex:page>

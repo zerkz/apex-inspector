@@ -1,0 +1,119 @@
+<template>
+    <div style="display: flex; flex-wrap: wrap; gap: 1em; margin-bottom: 1.5em; align-items: flex-end;">
+        <lightning-button label="Call testSimpleParameters" onclick={handleSimpleCall}></lightning-button>
+        <lightning-button label="Call testComplexParameters" onclick={handleComplexCall}></lightning-button>
+        <div style="display: flex; align-items: center; gap: 0.5em;">
+            <label for="boxcar-count" style="font-weight: 500;">Parallel calls:</label>
+            <input id="boxcar-count" type="number" min="1" value={boxcarCallCount} onchange={handleBoxcarCallCountChange} style="width: 4em;" />
+        </div>
+        <lightning-button label="Simulate Boxcarring (multiple calls at once)" onclick={handleBoxcarCalls}></lightning-button>
+        <lightning-button label="Call Apex Exception (simulate error)" onclick={handleExceptionCall}></lightning-button>
+        <lightning-button label="Call Limit Exception (simulate governor limit)" onclick={handleLimitExceptionCall}></lightning-button>
+        <lightning-button label="Test GraphQL Query" onclick={handleGraphQLCall}></lightning-button>
+    </div>
+
+    <template if:true={simpleResult}>
+        <div>
+            <strong>Simple Result:</strong>
+            <ul>
+                <template for:each={simpleResult} for:item="item">
+                    <li key={item}>{item}</li>
+                </template>
+            </ul>
+        </div>
+    </template>
+
+    <template if:true={complexResult}>
+        <div>
+            <strong>Complex Result:</strong>
+            <div>testString: {complexResult.testString}</div>
+            <div>testInteger: {complexResult.testInteger}</div>
+            <div>testBoolean: {complexResult.testBoolean}</div>
+            <div>
+                testMap:
+                <template if:true={complexResultMapEntries}>
+                    <ul>
+                        <template for:each={complexResultMapEntries} for:item="entry">
+                            <li key={entry.key}>{entry.key}: {entry.value}</li>
+                        </template>
+                    </ul>
+                </template>
+            </div>
+            <div>
+                testList:
+                <template if:true={complexResult.testList}>
+                    <ul>
+                        <template for:each={complexResult.testList} for:item="item">
+                            <li key={item}>{item}</li>
+                        </template>
+                    </ul>
+                </template>
+            </div>
+        </div>
+    </template>
+
+    <template if:true={boxcarSimpleResults}>
+        <div>
+            <strong>Boxcar Simple Results:</strong>
+            <ul>
+                <template for:each={boxcarSimpleResults} for:item="item">
+                    <li key={item.key}>
+                        <div>Simple Result: {item.resultString}</div>
+                    </li>
+                </template>
+            </ul>
+        </div>
+    </template>
+    <template if:true={boxcarComplexResults}>
+        <div>
+            <strong>Boxcar Complex Results:</strong>
+            <ul>
+                <template for:each={boxcarComplexResults} for:item="item">
+                    <li key={item.key}>
+                        <div>Complex Result:</div>
+                        <div>testString: {item.result.testString}</div>
+                        <div>testInteger: {item.result.testInteger}</div>
+                        <div>testBoolean: {item.result.testBoolean}</div>
+                        <div>
+                            testMap:
+                            <template if:true={item.testMapEntries}>
+                                <ul>
+                                    <template for:each={item.testMapEntries} for:item="entry">
+                                        <li key={entry.key}>{entry.key}: {entry.value}</li>
+                                    </template>
+                                </ul>
+                            </template>
+                        </div>
+                        <div>
+                            testList:
+                            <template if:true={item.result.testList}>
+                                <ul>
+                                    <template for:each={item.result.testList} for:item="listItem">
+                                        <li key={listItem}>{listItem}</li>
+                                    </template>
+                                </ul>
+                            </template>
+                        </div>
+                    </li>
+                </template>
+            </ul>
+        </div>
+    </template>
+
+    <template if:true={organizationData}>
+        <div>
+            <strong>GraphQL Organization Data:</strong>
+            <div>Instance Name: {organizationData.InstanceName.value}</div>
+            <div>Organization ID: {organizationData.Id}</div>
+            <div>Organization Name: {organizationData.Name.value}</div>
+        </div>
+    </template>
+
+    <template if:true={graphqlError}>
+        <div style="color:red">GraphQL Error: {graphqlError}</div>
+    </template>
+
+    <template if:true={error}>
+        <div style="color:red">Error: {error}</div>
+    </template>
+</template>

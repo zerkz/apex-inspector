@@ -56,6 +56,20 @@ chrome.devtools.panels.create(
           });
         }
 
+        // Handle Apex REST (@RestResource) requests
+        if (request.request.url.includes("/services/apexrest/")) {
+          request.getContent((body) => {
+            const requestWithContent = {
+              ...request,
+              response: {
+                ...request.response,
+                content: { text: body }
+              }
+            };
+            postToPanel({ type: "apexrest", request: requestWithContent });
+          });
+        }
+
         // Handle VisualForce Remoting requests
         if (request.request.url.includes("/apexremote")) {
           request.getContent((body) => {

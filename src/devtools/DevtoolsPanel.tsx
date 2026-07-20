@@ -2,7 +2,11 @@ import React, { useEffect, useState, useMemo } from "react";
 import React18JsonView from 'react18-json-view';
 import 'react18-json-view/src/style.css';
 import { useOptionsSettings } from '../chrome-extension/options/useOptionsSettings';
-import type { FullRequest, FullResponse } from './networkTypes';
+import type { ApexAction } from './apexAction';
+import { parseApexRestRequest } from './parsers/apexRest';
+import { canGenerateAnonApex, generateAnonApex, generateBoxcarAnonApex } from './export/anonApex';
+import { buildExportMeta, downloadFile, exportFilename, toJsonExport, toMarkdown } from './export/fileExport';
+import { ExportMenu } from './export/ExportMenu';
 
 // Simple UUID generator for boxcar grouping
 function generateBoxcarId() {
@@ -101,29 +105,6 @@ function getColorFilter(hslColor: string): string {
   return `hue-rotate(${hue}deg) saturate(${saturation / 100 + 0.5}) brightness(${lightness / 50})`;
 }
 
-// Types for Apex Action
-interface ApexAction {
-  id: string;
-  timestamp: number;
-  apexClass: string;
-  method: string;
-  latency: number;
-  request: Record<string, unknown>;
-  response: Record<string, unknown>;
-  rawRequest: unknown;
-  rawResponse: unknown;
-  context: Record<string, unknown>;
-  network: {
-    requestId: string;
-    url: string;
-    latency: number;
-  };
-  fullResponse?: Record<string, unknown> | FullResponse; // Add this field
-  fullRequest?: unknown | FullRequest; // Add this field for the full HTTP request
-  error?: string | null; // Add error property
-  boxcarId?: string; // Add boxcarId for grouping
-}
-
 type SortableKeys = "timestamp" | "apexClass" | "method" | "latency";
 
 const columns: { key: SortableKeys; label: string }[] = [
@@ -178,6 +159,16 @@ const DevtoolsPanel: React.FC = () => {
     function handleMessage(event: MessageEvent) {
       // Debug: log all incoming messages
       console.debug('[Apex Inspector] Panel received message:', event.data);
+      // ApexREST bodies can be XML/text, so they bypass the JSON-only parsing below
+      if (event.data && event.data.type === "apexrest" && event.data.request) {
+        try {
+          const parsed = parseApexRestRequest(event.data.request);
+          if (parsed) setActions((prev) => [...prev, parsed]);
+        } catch (err) {
+          console.error('[Apex Inspector] Error parsing ApexREST event:', err, event.data);
+        }
+        return;
+      }
       if (event.data && (event.data.type === "network" || event.data.type === "lightning" || event.data.type === "community" || event.data.type === "vfremoting") && event.data.request) {
         try {
           const request = event.data.request;
@@ -311,6 +302,7 @@ const DevtoolsPanel: React.FC = () => {
               {
                 id: `webruntime-${request.requestId || request.request.url}-${Date.now()}`,
                 timestamp: request.startedDateTime ? new Date(request.startedDateTime).getTime() : Date.now(),
+                callType: 'community',
                 apexClass: fullClassName,
                 method: apexMethod,
                 latency: request.time,
@@ -440,6 +432,7 @@ const DevtoolsPanel: React.FC = () => {
                   {
                     id: `vfremoting-${request.requestId || request.request.url}-${idx}-${Date.now()}`,
                     timestamp: request.startedDateTime ? new Date(request.startedDateTime).getTime() : Date.now(),
+                    callType: 'vfremoting',
                     apexClass: apexClass,
                     method: apexMethod,
                     latency: request.time,
@@ -587,6 +580,7 @@ const DevtoolsPanel: React.FC = () => {
                     {
                       id: `graphql-${request.requestId || request.request.url}-${idx}-${Date.now()}`,
                       timestamp: request.startedDateTime ? new Date(request.startedDateTime).getTime() : Date.now(),
+                      callType: 'graphql',
                       apexClass: 'GraphQL',
                       method: operationType,
                       latency: request.time,
@@ -848,6 +842,7 @@ const DevtoolsPanel: React.FC = () => {
               {
                 id: `uirecordapi-${request.requestId || request.request.url}-${Date.now()}`,
                 timestamp: request.startedDateTime ? new Date(request.startedDateTime).getTime() : Date.now(),
+                callType: 'uirecordapi',
                 apexClass: 'uiRecordApi',
                 method: uiMethod,
                 latency: request.time,
@@ -1011,6 +1006,7 @@ const DevtoolsPanel: React.FC = () => {
                         getApexActionUniqueId(action, (resJsonObj.actions as unknown[])?.[idx], resJsonObj.perfSummary) ||
                         (request.requestId || request.request.url) + "-" + idx,
                       timestamp: request.startedDateTime ? new Date(request.startedDateTime).getTime() : Date.now(),
+                      callType: 'aura',
                       apexClass: typeof (paramsObj as Record<string, unknown>)["namespace"] === "string" && (paramsObj as Record<string, unknown>)["namespace"]
                         ? `${(paramsObj as Record<string, unknown>)["namespace"] as string}.${apexClass}`
                         : apexClass,
@@ -1041,6 +1037,7 @@ const DevtoolsPanel: React.FC = () => {
                         getApexActionUniqueId(action, (resJsonObj.actions as unknown[])?.[idx], resJsonObj.perfSummary) ||
                         (request.requestId || request.request.url) + "-" + idx,
                       timestamp: request.startedDateTime ? new Date(request.startedDateTime).getTime() : Date.now(),
+                      callType: 'unknown',
                       apexClass: '[Unparsed] ApexAction',
                       method: '[Unparsed] execute',
                       latency: request.time,
@@ -1072,6 +1069,7 @@ const DevtoolsPanel: React.FC = () => {
               {
                 id: `fallback-${request.requestId || request.request.url}-${Date.now()}`,
                 timestamp: request.startedDateTime ? new Date(request.startedDateTime).getTime() : Date.now(),
+                callType: 'unknown',
                 apexClass: '[Unknown Format]',
                 method: '[Unknown]',
                 latency: request.time,
@@ -1188,15 +1186,16 @@ const DevtoolsPanel: React.FC = () => {
   // Shows a toast after copy
   const [copiedToast, setCopiedToast] = useState<{ id: string; x: number; y: number } | null>(null);
   function copyJsonToClipboard(data: unknown, toastId?: string, evt?: React.MouseEvent) {
+    if (typeof data === 'undefined') {
+      return;
+    }
+    copyTextToClipboard(JSON.stringify(data, null, 2), toastId, evt);
+  }
+  function copyTextToClipboard(text: string, toastId?: string, evt?: React.MouseEvent) {
     try {
-      if (typeof data === 'undefined') {
-        return;
-      }
-      const json = JSON.stringify(data, null, 2);
-      
       // Try modern clipboard API first
       if (navigator.clipboard && window.isSecureContext) {
-        navigator.clipboard.writeText(json).then(() => {
+        navigator.clipboard.writeText(text).then(() => {
           // Show toast if requested
           if (toastId && evt) {
             const rect = (evt.target as HTMLElement).getBoundingClientRect();
@@ -1205,11 +1204,11 @@ const DevtoolsPanel: React.FC = () => {
           }
         }).catch(() => {
           // Fall back to legacy method
-          fallbackCopyToClipboard(json, toastId, evt);
+          fallbackCopyToClipboard(text, toastId, evt);
         });
       } else {
         // Fall back to legacy method
-        fallbackCopyToClipboard(json, toastId, evt);
+        fallbackCopyToClipboard(text, toastId, evt);
       }
     } catch {
       // Do nothing on failure
@@ -1242,6 +1241,27 @@ const DevtoolsPanel: React.FC = () => {
 
   // Get the currently selected row for detail view
   const selectedRow = expandedId ? filteredSorted.find(row => row.id === expandedId) : null;
+
+  // File export (Feature: export single request / all filtered rows as Markdown or JSON)
+  const anyFilterActive = bodySearch.trim() !== '' || Object.values(filter).some(v => Boolean(v && v.trim()));
+  function handleExport(rows: ApexAction[], format: 'md' | 'json', single?: ApexAction) {
+    if (rows.length === 0) return;
+    const meta = buildExportMeta(rows, single ? false : anyFilterActive);
+    if (format === 'md') {
+      downloadFile(exportFilename('md', single), toMarkdown(rows, meta), 'text/markdown');
+    } else {
+      // Raw payloads are cheap for a single request and useful for debugging; too noisy for bulk export
+      downloadFile(exportFilename('json', single), toJsonExport(rows, meta, { includeRaw: Boolean(single) }), 'application/json');
+    }
+  }
+
+  // Boxcar members are gathered from all actions (not filteredSorted) so an active
+  // filter can't silently drop calls from the generated script
+  const boxcarMembers = selectedRow?.boxcarId
+    ? actions.filter(a => a.boxcarId === selectedRow.boxcarId)
+    : [];
+
+  const smallBtnClass = `px-2 py-1 rounded text-xs border transition-colors duration-200 flex-shrink-0 ${theme === 'dark' ? 'bg-gray-700 text-white border-gray-600 hover:bg-gray-600' : 'bg-gray-200 text-gray-900 border-gray-300 hover:bg-gray-300'}`;
 
   return (
     <div className={
@@ -1349,6 +1369,16 @@ const DevtoolsPanel: React.FC = () => {
               →
             </button>
             <span className="text-xs text-gray-500 whitespace-nowrap">Row {selectedIdx !== null ? selectedIdx + 1 : ''} / {filteredSorted.length}</span>
+            <ExportMenu
+              label="Export All"
+              title="Exports the currently filtered/sorted rows"
+              disabled={filteredSorted.length === 0}
+              buttonClassName="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              items={[
+                { label: 'Markdown (.md)', onClick: () => handleExport(filteredSorted, 'md') },
+                { label: 'JSON (.json)', onClick: () => handleExport(filteredSorted, 'json') },
+              ]}
+            />
             {/* Clear button */}
             <button
               className="px-3 py-1 bg-red-500 text-white rounded text-sm hover:bg-red-600"
@@ -1405,6 +1435,39 @@ const DevtoolsPanel: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {canGenerateAnonApex(selectedRow) && (
+                boxcarMembers.length > 1 ? (
+                  <ExportMenu
+                    label="Copy Apex"
+                    title="Copy as an Anonymous Apex script"
+                    buttonClassName={smallBtnClass}
+                    items={[
+                      { label: 'This call only', onClick: evt => copyTextToClipboard(generateAnonApex(selectedRow), selectedRow.id + '-apex', evt) },
+                      { label: `Entire boxcar (${boxcarMembers.length} calls)`, onClick: evt => copyTextToClipboard(generateBoxcarAnonApex(boxcarMembers), selectedRow.id + '-apex', evt) },
+                    ]}
+                  />
+                ) : (
+                  <button
+                    className={smallBtnClass}
+                    title="Copy this call as an Anonymous Apex script"
+                    onClick={e => copyTextToClipboard(generateAnonApex(selectedRow), selectedRow.id + '-apex', e)}
+                  >
+                    Copy Apex
+                  </button>
+                )
+              )}
+              {copiedToast && copiedToast.id === selectedRow.id + '-apex' && (
+                <span className="absolute z-50 text-xs bg-black text-white rounded px-2 py-1 animate-fade-in-out" style={{ pointerEvents: 'none' }}>Copied!</span>
+              )}
+              <ExportMenu
+                label="Export"
+                title="Export this request to a file"
+                buttonClassName={smallBtnClass}
+                items={[
+                  { label: 'Markdown (.md)', onClick: () => handleExport([selectedRow], 'md', selectedRow) },
+                  { label: 'JSON (.json)', onClick: () => handleExport([selectedRow], 'json', selectedRow) },
+                ]}
+              />
               <button
                 className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md transition-colors duration-200"
                 onClick={() => {

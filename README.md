@@ -15,6 +15,7 @@ Apex Inspector is a Chrome DevTools extension for Salesforce developers that pro
     - `/apexremote` for VisualForce Remoting calls (including bulkified/boxcarred batches)
     - GraphQL API calls (`/services/data/*/graphql`)
     - Lightning Data Service calls (`uiRecordApi` @wire methods like `getRecord`, `updateRecord`, `createRecord`)
+    - `/services/apexrest/` for Apex REST (`@RestResource`) calls
   - Supports both single and boxcarred (batched) Apex actions.
   - Calls can be sorted, or filtered via the request body or response body contents.
 
@@ -32,6 +33,17 @@ Apex Inspector is a Chrome DevTools extension for Salesforce developers that pro
     - Response body 
     - Timing/Performance tables
     - Raw Data
+
+- **Export to Anonymous Apex:**
+  - "Copy Apex" in the detail view generates an Anonymous Apex script that replays the captured call.
+  - Scalar parameters become typed literals; complex parameters use `JSON.deserialize` with a `TODO` type placeholder to fill in.
+  - Supports Aura/@AuraEnabled, Experience Cloud, VisualForce Remoting, uiRecordApi (as DML/SOQL), and Apex REST (via a `RestContext` harness).
+  - Boxcarred requests can be exported as a single script replaying every call.
+
+- **File Export:**
+  - Export a single request or all (filtered) requests to Markdown or JSON.
+  - Markdown output is human readable and formatted for pasting into AI tools; JSON output is structured for programmatic use.
+  - Raw HTTP request/response data (headers, cookies) is never included in exports.
 
 - **Responsive UI** 
   - Useful no matter what screen size you are on.

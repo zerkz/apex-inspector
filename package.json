@@ -17,7 +17,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "watch-build": "chokidar \"src/**/*\" \"*.html\" \"manifest.json\" -c \"pnpm run build\""
+    "watch-build": "chokidar \"src/**/*\" \"*.html\" \"public/manifest.json\" -c \"pnpm run build\""
   },
   "dependencies": {
     "@types/node": "^24.2.1",

@@ -61,7 +61,8 @@ export class StorageSync {
     if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
       try {
         return new Promise((resolve) => {
-          chrome.storage.local.get(STORAGE_KEYS, (result) => {
+          chrome.storage.local.get(STORAGE_KEYS, (items) => {
+            const result = items as Partial<OptionsSettings>;
             if (chrome.runtime.lastError) {
               console.warn('Chrome storage get error:', chrome.runtime.lastError);
               resolve(this.loadFromLocalStorage(defaults));

@@ -936,7 +936,7 @@ const DevtoolsPanel: React.FC = () => {
                   const rawRespObj = rawResp as Record<string, unknown>;
                   if (rawRespObj.state === 'ERROR') {
                     // Extract all error details, not just the message
-                    let errorDetails: Record<string, unknown> = {};
+                    let errorDetails: Record<string, unknown>;
                     let errorMsg = 'Unknown Apex error';
                     
                     // Handle error array (most common Salesforce format)

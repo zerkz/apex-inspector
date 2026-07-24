@@ -1,19 +1,22 @@
-name: Dependency age policy
+name: Dependency policy
 
 on:
   pull_request:
     paths:
-      - "yarn.lock"
       - "package.json"
-      - "scripts/check-dep-age.mjs"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - ".github/workflows/dependency-age.yml"
 
 jobs:
-  check-dep-age:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - run: node scripts/check-dep-age.mjs
+      - run: corepack enable
+      # pnpm validates the lockfile against minimumReleaseAge
+      # (pnpm-workspace.yaml) during install and fails on violations.
+      - run: pnpm install --frozen-lockfile

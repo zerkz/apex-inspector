@@ -1,0 +1,24 @@
+# Supply chain protection: only resolve versions published at least 30 days ago
+# (43200 minutes). Does not apply to versions already in pnpm-lock.yaml.
+minimumReleaseAge: 43200
+
+# Exemptions for security patches still inside the 30-day window
+# (audit advisories GHSA fixes). Remove once the patched versions age out.
+minimumReleaseAgeExclude:
+  - brace-expansion
+  - js-yaml
+  - postcss
+
+# Force the patched versions (still newer than what parent ranges resolve to).
+overrides:
+  'brace-expansion@1': '>=1.1.16 <2'
+  'brace-expansion@5': '>=5.0.7 <6'
+  'js-yaml@4': '>=4.3.0 <5'
+  'postcss@8': '>=8.5.18 <9'
+  # resolver fails on nanoid instead of falling back to a mature version
+  'nanoid@3': '3.3.15'
+  # GHSA-g7r4-m6w7-qqqr: dev-server file read fixed in 0.28.1; vite pins 0.27
+  'esbuild@0.27': '>=0.28.1 <0.29'
+
+allowBuilds:
+  esbuild: true

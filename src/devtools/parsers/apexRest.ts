@@ -59,7 +59,7 @@ export function parseApexRestRequest(request: FullRequest): ApexAction | null {
   }
 
   const responseText = request.response?.content?.text;
-  let responseParsed: unknown = null;
+  let responseParsed: unknown;
   try {
     responseParsed = responseText ? JSON.parse(responseText) : null;
   } catch {

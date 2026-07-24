@@ -1,11 +1,11 @@
 {
   "packageDirectories": [
     {
-      "path": "force-app",
+      "path": "integration-test/force-app",
       "default": true
     }
   ],
-  "name": "clipboard-copy-button",
+  "name": "apex-inspector-test",
   "namespace": "",
   "sfdcLoginUrl": "https://login.salesforce.com",
   "sourceApiVersion": "62.0"

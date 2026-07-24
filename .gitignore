@@ -25,3 +25,7 @@ dist-ssr
 *.har
 *.pem
 *.crx
+
+# Salesforce CLI local state
+.sf/
+.sfdx/

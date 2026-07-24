@@ -1,0 +1,19 @@
+name: Dependency age policy
+
+on:
+  pull_request:
+    paths:
+      - "yarn.lock"
+      - "package.json"
+      - "scripts/check-dep-age.mjs"
+      - ".github/workflows/dependency-age.yml"
+
+jobs:
+  check-dep-age:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: node scripts/check-dep-age.mjs

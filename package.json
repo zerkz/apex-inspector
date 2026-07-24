@@ -17,6 +17,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "check-dep-age": "node scripts/check-dep-age.mjs",
     "watch-build": "chokidar \"src/**/*\" \"*.html\" \"manifest.json\" -c \"npm run build\""
   },
   "dependencies": {

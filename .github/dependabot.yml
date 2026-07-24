@@ -1,0 +1,10 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Supply chain protection: only propose versions at least 30 days old.
+    # Security updates bypass the cooldown.
+    cooldown:
+      default-days: 30

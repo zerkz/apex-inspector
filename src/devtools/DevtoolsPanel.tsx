@@ -1267,7 +1267,7 @@ const DevtoolsPanel: React.FC = () => {
     <div className={
       'p-4 bg-white dark:bg-gray-900 min-h-screen transition-colors duration-300 text-gray-900 dark:text-gray-100 overflow-x-hidden'
     }>
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-2 overflow-hidden">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-2">
         <div id='options-bar' className="flex items-center gap-2 flex-1 min-w-0">
           <h1 className="text-2xl font-bold mb-2 md:mb-0 flex-shrink-0">Apex Inspector</h1>
           {/* Visual/Aesthetic Controls Grouped Left */}
@@ -1435,27 +1435,6 @@ const DevtoolsPanel: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {canGenerateAnonApex(selectedRow) && (
-                boxcarMembers.length > 1 ? (
-                  <ExportMenu
-                    label="Copy Apex"
-                    title="Copy as an Anonymous Apex script"
-                    buttonClassName={smallBtnClass}
-                    items={[
-                      { label: 'This call only', onClick: evt => copyTextToClipboard(generateAnonApex(selectedRow), selectedRow.id + '-apex', evt) },
-                      { label: `Entire boxcar (${boxcarMembers.length} calls)`, onClick: evt => copyTextToClipboard(generateBoxcarAnonApex(boxcarMembers), selectedRow.id + '-apex', evt) },
-                    ]}
-                  />
-                ) : (
-                  <button
-                    className={smallBtnClass}
-                    title="Copy this call as an Anonymous Apex script"
-                    onClick={e => copyTextToClipboard(generateAnonApex(selectedRow), selectedRow.id + '-apex', e)}
-                  >
-                    Copy Apex
-                  </button>
-                )
-              )}
               {copiedToast && copiedToast.id === selectedRow.id + '-apex' && (
                 <span className="absolute z-50 text-xs bg-black text-white rounded px-2 py-1 animate-fade-in-out" style={{ pointerEvents: 'none' }}>Copied!</span>
               )}
@@ -1466,6 +1445,12 @@ const DevtoolsPanel: React.FC = () => {
                 items={[
                   { label: 'Markdown (.md)', onClick: () => handleExport([selectedRow], 'md', selectedRow) },
                   { label: 'JSON (.json)', onClick: () => handleExport([selectedRow], 'json', selectedRow) },
+                  ...(canGenerateAnonApex(selectedRow) ? [
+                    { label: 'Anonymous Apex', onClick: (evt: React.MouseEvent) => copyTextToClipboard(generateAnonApex(selectedRow), selectedRow.id + '-apex', evt) },
+                    ...(boxcarMembers.length > 1 ? [
+                      { label: `Anonymous Apex - entire boxcar (${boxcarMembers.length} calls)`, onClick: (evt: React.MouseEvent) => copyTextToClipboard(generateBoxcarAnonApex(boxcarMembers), selectedRow.id + '-apex', evt) },
+                    ] : []),
+                  ] : []),
                 ]}
               />
               <button

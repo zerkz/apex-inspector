@@ -20,7 +20,7 @@
     "watch-build": "chokidar \"src/**/*\" \"*.html\" \"public/manifest.json\" -c \"pnpm run build\""
   },
   "dependencies": {
-    "@types/node": "^24.2.1",
+    "@types/node": "^26.0.1",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react18-json-view": "^0.2.9"
